@@ -1,0 +1,70 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="mount_v2">
+
+	<material name="mount_dark_grey">
+		<color rgba="${12/255.0} ${12/255.0} ${12/255.0} 1.000" />
+	</material>
+
+	<xacro:macro name="mount_v2" params="end_effector">
+
+		<!-- links the flange on the last joint to the mount_v1 -->
+		<joint name="flange_to_mount" type="fixed">
+			<parent link="flange" />
+			<child link="camera_mount" />
+			<origin rpy="0.0 ${pi/2.0} 0.0" xyz="0.02 0.0 0.0" />
+			<axis xyz="0 0 0" />
+		</joint>
+
+		<!-- camera mount == mount_v2 link -->
+		<link name="camera_mount">
+			<inertial>
+				<origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 0.0" />
+				<mass value="1.0033" />
+				<inertia ixx="0.001" iyy="0.001" izz="0.001" ixy="0.0" iyz="0.001" ixz="0.001" />
+			</inertial>
+			<visual>
+				<origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 ${pi/2.0}" />
+				<geometry>
+					<mesh
+						filename="file://$(find igus_rebel_description_ros2)/meshes/mounts/mount_v2.stl"
+						scale="0.001 0.001 0.001" />
+				</geometry>
+				<material name="mount_dark_grey" />
+			</visual>
+			<collision>
+				<origin xyz="0.0 0.0 0.0" rpy="0.0 0.0 ${pi/2.0}" />
+				<geometry>
+					<mesh
+						filename="file://$(find igus_rebel_description_ros2)/meshes/mounts/mount_v2_collision_mesh.stl"
+						scale="0.001 0.001 0.001" />
+				</geometry>
+				<material name="mount_dark_grey" />
+			</collision>
+		</link>
+
+		<!-- positions the camera inside the structure -->
+		<joint name="mount_to_cam" type="fixed">
+			<parent link="camera_mount" />
+			<child link="camera_insert" />
+			<origin rpy="0.0 ${-pi/2.0} 0.0" xyz="-0.1 0.0 -0.068" />
+			<axis xyz="0 0 0" />
+		</joint>
+
+		<link name="camera_insert" />
+
+		<!-- End effectors -->
+		<xacro:if value="${end_effector == 'soft_gripper'}">
+
+			<!-- description urdf of the soft gripper -->
+			<xacro:include
+				filename="$(find igus_rebel_description_ros2)/urdf/end_effectors/soft_gripper.description.xacro" />
+
+			<!-- ros2 control of the soft gripper actuator -->
+			<xacro:include
+				filename="$(find igus_rebel_description_ros2)/urdf/end_effectors/soft_gripper.control.xacro" />
+			<xacro:igus_rebel_gripper use_dummy="false" />
+
+		</xacro:if>
+
+	</xacro:macro>
+</robot>
