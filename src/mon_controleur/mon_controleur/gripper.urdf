@@ -1,0 +1,128 @@
+<?xml version="1.0"?>
+
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="igus_rebel">
+
+  <!-- =======================
+       Materials
+  ======================== -->
+  <material name="gripper_light_blue">
+    <color rgba="${211/255.0} ${209/255.0} ${241/255.0} 1.0"/>
+  </material>
+
+  <material name="gripper_white">
+    <color rgba="${240/255.0} ${240/255.0} ${240/255.0} 1.0"/>
+  </material>
+
+  <!-- =======================
+       Mount base to camera_mount
+  ======================== -->
+  <joint name="schunk_egb25_mount_joint" type="fixed">
+    <parent link="camera_mount"/>
+    <child link="schunk_egb25_base"/>
+    <origin xyz="0 0 0" rpy="0 0 0"/>
+  </joint>
+
+  <!-- =======================
+       Base link
+  ======================== -->
+  <link name="schunk_egb25_base">
+    <visual>
+      <!-- Rotate mesh 180° around Y (common STL flip) -->
+      <origin xyz="0 0 0" rpy="0 ${pi} 0"/>
+      <geometry>
+        <mesh filename="package://igus_rebel_description_ros2/meshes/end_effectors/schunk_egp25.stl"
+              scale="0.001 0.001 0.001"/>
+      </geometry>
+      <material name="gripper_white"/>
+    </visual>
+
+    <!-- Simple envelope collision (fast). Adjust later if needed -->
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <box size="0.0265 0.018 0.0727"/>
+      </geometry>
+    </collision>
+
+    <!-- Approx inertia using box approximation (OK for now) -->
+    <inertial>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <mass value="0.11"/>
+      <inertia ixx="5.14185e-05" ixy="0" ixz="0"
+               iyy="5.48858e-05" iyz="0"
+               izz="9.40729e-06"/>
+    </inertial>
+  </link>
+
+  <!-- =======================
+       Finger parameters
+       Tune these after RViz validation
+  ======================== -->
+  <xacro:property name="finger_len"  value="0.030"/>  <!-- X -->
+  <xacro:property name="finger_thk"  value="0.006"/>  <!-- Y -->
+  <xacro:property name="finger_h"    value="0.020"/>  <!-- Z -->
+  <xacro:property name="finger_mass" value="0.02"/>   <!-- kg -->
+
+  <!-- Joint placement (relative to schunk_egb25_base) -->
+  <xacro:property name="x0" value="0.0"/>
+  <xacro:property name="y0" value="0.009"/>  <!-- half-gap + half finger thickness -->
+  <xacro:property name="z0" value="0.0"/>
+
+  <!-- =======================
+       Reusable finger link macro
+  ======================== -->
+  <xacro:macro name="make_finger_link" params="name material_name">
+    <link name="${name}">
+      <visual>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <box size="${finger_len} ${finger_thk} ${finger_h}"/>
+        </geometry>
+        <material name="${material_name}"/>
+      </visual>
+
+      <collision>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <geometry>
+          <box size="${finger_len} ${finger_thk} ${finger_h}"/>
+        </geometry>
+      </collision>
+
+      <inertial>
+        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <mass value="${finger_mass}"/>
+        <!-- Placeholder inertia for now; refine later if needed -->
+        <inertia ixx="1e-6" ixy="0" ixz="0" iyy="1e-6" iyz="0" izz="1e-6"/>
+      </inertial>
+    </link>
+  </xacro:macro>
+
+  <!-- Create left and right finger links -->
+  <xacro:make_finger_link name="left_finger"  material_name="gripper_white"/>
+  <xacro:make_finger_link name="right_finger" material_name="gripper_white"/>
+
+  <!-- =======================
+       Finger joints (prismatic)
+       Parent is the base link
+  ======================== -->
+
+  <!-- LEFT -->
+  <joint name="left_finger_joint" type="prismatic">
+    <parent link="schunk_egb25_base"/>
+    <child link="left_finger"/>
+    <origin xyz="${x0} ${y0} ${z0}" rpy="0 0 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="0" upper="0.003" effort="20" velocity="0.1"/>
+  </joint>
+
+  <!-- RIGHT (mirrored) -->
+  <joint name="right_finger_joint" type="prismatic">
+    <parent link="schunk_egb25_base"/>
+    <child link="right_finger"/>
+    <origin xyz="${x0} ${-y0} ${z0}" rpy="0 0 0"/>
+    <axis xyz="0 -1 0"/>
+    <limit lower="0" upper="0.003" effort="20" velocity="0.1"/>
+    <mimic joint="left_finger_joint" multiplier="1" offset="0"/>
+  </joint>
+
+</robot>

@@ -26,6 +26,9 @@ setup(
             'bouge_robot = mon_controleur.bouge_robot:main',
             # Script Pick & Place complet
             'pick_and_place = mon_controleur.pick_and_place:main',
+            # NOUVEAU : Script pour la pince
+            'gripper_control = mon_controleur.gripper_control:main',
+            
         ],
     },
 )
