@@ -67,7 +67,12 @@
 
 		</xacro:if>
 
-
+		<!-- Chargement conditionnel du Schunk EGP25 (effecteur_simplifie.stl) -->
+		<xacro:if value="${end_effector == 'schunk_egp25'}">
+			<xacro:include filename="$(find igus_rebel_description_ros2)/urdf/end_effectors/schunk_egp25.urdf.xacro" />
+			<xacro:schunk_gripper />
+		</xacro:if>
+		
 	</xacro:macro>
 
 </robot>

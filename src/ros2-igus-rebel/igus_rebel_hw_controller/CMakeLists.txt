@@ -27,6 +27,7 @@ find_package(pluginlib REQUIRED) # added according to wiki
 find_package(rclcpp_lifecycle REQUIRED) # added according to wiki
 find_package(rcpputils REQUIRED)
 find_package(ros2_control REQUIRED)
+find_package(std_srvs REQUIRED)
 
 set(INCLUDE_DEPENDS
 	ament_cmake
@@ -34,6 +35,7 @@ set(INCLUDE_DEPENDS
 	rcpputils
 	ros2_control
 	std_msgs
+	std_srvs
 	sensor_msgs
 	control_msgs
 	rviz2

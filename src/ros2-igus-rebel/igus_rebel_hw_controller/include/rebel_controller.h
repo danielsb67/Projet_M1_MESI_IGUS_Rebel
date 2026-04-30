@@ -28,6 +28,7 @@
 #include <hardware_interface/types/hardware_interface_type_values.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_lifecycle/state.hpp>
+#include <std_srvs/srv/set_bool.hpp>
 
 // namespace for encapsulating the hardware controller package
 namespace igus_rebel_hw_controller {
@@ -103,6 +104,12 @@ private:
 
 	// checks whether the input commands from the controller have changed since the last one received
 	bool detect_change(std::vector<double> &v1, std::vector<double> &v2);
+
+	// Gripper service bridge (proxies CMD DOUT through the existing CRI socket)
+	rclcpp::Node::SharedPtr gripper_node_;
+	rclcpp::executors::SingleThreadedExecutor::SharedPtr gripper_executor_;
+	rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr gripper_srv_;
+	std::thread gripper_service_thread_;
 
 	// Function to react to specific status values, to display warnings, error messages, etc.
 	void processStatus(const cri_messages::Status &);

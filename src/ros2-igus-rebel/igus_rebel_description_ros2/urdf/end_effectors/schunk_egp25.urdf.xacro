@@ -2,88 +2,65 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
   <xacro:macro name="schunk_gripper">
-  
-    <material name="gripper_white">
-      <color rgba="${240/255.0} ${240/255.0} ${240/255.0} 1.0"/>
+
+    <material name="effecteur_color">
+      <color rgba="0.2 0.6 0.8 1.0"/>
     </material>
 
-    <joint name="schunk_egb25_mount_joint" type="fixed">
-      <parent link="camera_mount"/>
-      <child link="schunk_egb25_base"/>
+    <!-- Joint fixe entre la bride du bras (flange) et l'effecteur -->
+    <joint name="joint_flange_effecteur" type="fixed">
+      <parent link="flange"/>
+      <child link="effecteur_simplifie_link"/>
+      <!-- Décaler en Z si le STL a son origine à sa base (ajuster selon le mesh) -->
       <origin xyz="0 0 0" rpy="0 0 0"/>
     </joint>
 
-    <link name="schunk_egb25_base">
+    <link name="effecteur_simplifie_link">
+
       <visual>
-        <origin xyz="0 0 0" rpy="0 ${pi} 0"/>
+        <!-- STL en mm : X[-75,0] Y[0,155] Z[-30,0]
+             Le flange a rpy="0 -pi/2 0" → son axe X pointe vers le haut (= Z de link_8).
+             Rz(-90°) : STL-Y(hauteur 155mm) → link-X (vers le haut) ✓
+             xyz : recentre Y (37.5mm) et Z (15mm) après rotation -->
+        <origin xyz="0 -0.0375 0.015" rpy="0 0 -1.5708"/>
         <geometry>
-          <mesh filename="package://igus_rebel_description_ros2/meshes/end_effectors/schunk_egp25.stl" scale="0.001 0.001 0.001"/>
+          <mesh filename="package://igus_rebel_description_ros2/meshes/end_effectors/effecteur_simplifie.stl"
+                scale="0.001 0.001 0.001"/>
         </geometry>
-        <material name="gripper_white"/>
+        <material name="effecteur_color"/>
       </visual>
+
+      <!-- Boîte de collision : 155mm(X) x 75mm(Y) x 30mm(Z), centrée à mi-hauteur -->
       <collision>
-        <origin xyz="0 0 0" rpy="0 0 0"/>
+        <origin xyz="0.0775 0 0.015" rpy="0 0 0"/>
         <geometry>
-          <box size="0.0265 0.018 0.0727"/>
+          <box size="0.155 0.075 0.030"/>
         </geometry>
       </collision>
+
+      <!-- Inertie d'un parallélépipède 155x75x30mm, masse 0.5kg -->
       <inertial>
-        <origin xyz="0 0 0" rpy="0 0 0"/>
-        <mass value="0.11"/>
-        <inertia ixx="5.14185e-05" ixy="0" ixz="0" iyy="5.48858e-05" iyz="0" izz="9.40729e-06"/>
+        <origin xyz="0.0775 0 0" rpy="0 0 0"/>
+        <mass value="0.5"/>
+        <inertia ixx="2.72e-4" ixy="0" ixz="0"
+                 iyy="1.24e-3" iyz="0"
+                 izz="1.04e-3"/>
       </inertial>
+
     </link>
 
-    <xacro:property name="finger_len"  value="0.030"/>
-    <xacro:property name="finger_thk"  value="0.006"/>
-    <xacro:property name="finger_h"    value="0.020"/>
-    <xacro:property name="finger_mass" value="0.02"/>
-    <xacro:property name="x0" value="0.0"/>
-    <xacro:property name="y0" value="0.009"/>
-    <xacro:property name="z0" value="0.0"/>
+    <!-- TCP (Tool Center Point) : bout physique de la pince.
+         Offset de 0.185 m le long de l'axe X de l'effecteur (axe d'outil).
+         Ajuster TOOL_LENGTH_M si la pince est remplacée. -->
+    <xacro:property name="TOOL_LENGTH_M" value="0.185"/>
 
-    <xacro:macro name="make_finger_link" params="name material_name">
-      <link name="${name}">
-        <visual>
-          <origin xyz="0 0 0" rpy="0 0 0"/>
-          <geometry>
-            <box size="${finger_len} ${finger_thk} ${finger_h}"/>
-          </geometry>
-          <material name="${material_name}"/>
-        </visual>
-        <collision>
-          <origin xyz="0 0 0" rpy="0 0 0"/>
-          <geometry>
-            <box size="${finger_len} ${finger_thk} ${finger_h}"/>
-          </geometry>
-        </collision>
-        <inertial>
-          <origin xyz="0 0 0" rpy="0 0 0"/>
-          <mass value="${finger_mass}"/>
-          <inertia ixx="1e-6" ixy="0" ixz="0" iyy="1e-6" iyz="0" izz="1e-6"/>
-        </inertial>
-      </link>
-    </xacro:macro>
-
-    <xacro:make_finger_link name="left_finger"  material_name="gripper_white"/>
-    <xacro:make_finger_link name="right_finger" material_name="gripper_white"/>
-
-    <joint name="left_finger_joint" type="prismatic">
-      <parent link="schunk_egb25_base"/>
-      <child link="left_finger"/>
-      <origin xyz="${x0} ${y0} ${z0}" rpy="0 0 0"/>
-      <axis xyz="0 1 0"/>
-      <limit lower="0" upper="0.003" effort="20" velocity="0.1"/>
+    <joint name="joint_effecteur_tip" type="fixed">
+      <parent link="effecteur_simplifie_link"/>
+      <child link="gripper_tip_link"/>
+      <origin xyz="${TOOL_LENGTH_M} 0 0" rpy="0 0 0"/>
     </joint>
 
-    <joint name="right_finger_joint" type="prismatic">
-      <parent link="schunk_egb25_base"/>
-      <child link="right_finger"/>
-      <origin xyz="${x0} ${-y0} ${z0}" rpy="0 0 0"/>
-      <axis xyz="0 -1 0"/>
-      <limit lower="0" upper="0.003" effort="20" velocity="0.1"/>
-      <mimic joint="left_finger_joint" multiplier="1" offset="0"/>
-    </joint>
+    <link name="gripper_tip_link"/>
 
   </xacro:macro>
 </robot>

@@ -55,7 +55,7 @@ def declare_arguments():
     end_effector_arg = DeclareLaunchArgument(
         name="end_effector",
         default_value="soft_gripper",
-        choices=["toucher_v1", "soft_gripper", "none"],
+        choices=["toucher_v1", "soft_gripper", "schunk_egp25", "none"],
         description="Which end_effector to attach to the mount",
     )
 

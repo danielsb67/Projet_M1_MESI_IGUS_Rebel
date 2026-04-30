@@ -20,16 +20,30 @@
 		<!-- If mount is not placed, naked robot -->
 		<xacro:if value="${mount == 'none'}">
 
-			<group name="rebel_arm">
-				<chain base_link="igus_rebel_base_link" tip_link="link_8" />
-			</group>
+			<!-- Sans end effector -->
+			<xacro:if value="${end_effector == 'none'}">
+				<group name="rebel_arm">
+					<chain base_link="igus_rebel_base_link" tip_link="link_8" />
+				</group>
+				<group name="flange_group">
+					<link name="flange" />
+				</group>
+				<end_effector name="flange_EEF" parent_link="link_8" group="flange_group"
+					parent_group="rebel_arm" />
+			</xacro:if>
 
-			<group name="flange_group">
-				<link name="flange" />
-			</group>
-
-			<end_effector name="flange_EEF" parent_link="link_8" group="flange_group"
-				parent_group="rebel_arm" />
+			<!-- Avec Schunk EGP25 (effecteur_simplifie) -->
+			<xacro:if value="${end_effector == 'schunk_egp25'}">
+				<group name="rebel_arm">
+					<chain base_link="igus_rebel_base_link" tip_link="gripper_tip_link" />
+				</group>
+				<group name="schunk_egp25_group">
+					<link name="effecteur_simplifie_link" />
+					<link name="gripper_tip_link" />
+				</group>
+				<end_effector name="schunk_egp25_EEF" parent_link="gripper_tip_link"
+					group="schunk_egp25_group" parent_group="rebel_arm" />
+			</xacro:if>
 
 		</xacro:if>
 
@@ -139,6 +153,12 @@
 		<disable_collisions link1="link_6" link2="link_7" reason="Adjacent" />
 		<disable_collisions link1="link_6" link2="link_8" reason="Never" />
 		<disable_collisions link1="link_7" link2="link_8" reason="Adjacent" />
+
+		<!-- Collisions Schunk EGP25 -->
+		<xacro:if value="${end_effector == 'schunk_egp25'}">
+			<disable_collisions link1="link_8" link2="effecteur_simplifie_link" reason="Adjacent" />
+			<disable_collisions link1="effecteur_simplifie_link" link2="gripper_tip_link" reason="Adjacent" />
+		</xacro:if>
 
 
 		<!-- Collisions checks due to the presence of the scout base -->

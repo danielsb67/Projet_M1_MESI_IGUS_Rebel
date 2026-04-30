@@ -408,6 +408,38 @@ hardware_interface::CallbackReturn RebelController::on_activate(const rclcpp_lif
 	Command(cri_keywords::COMMAND_RESET);
 	Command(cri_keywords::COMMAND_ENABLE);
 
+	// Gripper bridge : expose /gripper/command service (SetBool)
+	// true = fermer (DOUT 31 true), false = ouvrir (DOUT 30 true)
+	// Uses the existing CRI socket — no second TCP connection needed.
+	gripper_node_ = std::make_shared<rclcpp::Node>("rebel_gripper_bridge");
+	gripper_executor_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
+	gripper_executor_->add_node(gripper_node_);
+
+	gripper_srv_ = gripper_node_->create_service<std_srvs::srv::SetBool>(
+		"/gripper/command",
+		[this](const std::shared_ptr<std_srvs::srv::SetBool::Request> req,
+			   std::shared_ptr<std_srvs::srv::SetBool::Response> res) {
+			if (req->data) {
+				Command("DOUT 30 false");
+				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+				Command("DOUT 31 true");
+				res->message = "Pince fermee";
+			} else {
+				Command("DOUT 31 false");
+				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+				Command("DOUT 30 true");
+				res->message = "Pince ouverte";
+			}
+			res->success = true;
+			RCLCPP_INFO(logger_, "Gripper: %s", res->message.c_str());
+		});
+
+	gripper_service_thread_ = std::thread([this]() {
+		gripper_executor_->spin();
+	});
+
+	RCLCPP_INFO(logger_, "Service /gripper/command disponible (true=fermer, false=ouvrir)");
+
 	return hardware_interface::CallbackReturn::SUCCESS;
 }
 
@@ -428,6 +460,12 @@ void RebelController::shutdown() {
  * 	else CallbackReturn::FAILURE
  */
 hardware_interface::CallbackReturn RebelController::on_deactivate(const rclcpp_lifecycle::State & /*previous_state*/) {
+	if (gripper_executor_) {
+		gripper_executor_->cancel();
+		if (gripper_service_thread_.joinable())
+			gripper_service_thread_.join();
+	}
+
 	std::fill(jogs_.begin(), jogs_.end(), 0.0f);
 
 	std::this_thread::sleep_for(std::chrono::milliseconds(aliveWaitMs + 10));
