@@ -1,0 +1,74 @@
+==============================================================
+  RAPPORT DE RÉPÉTABILITÉ — 2026-05-18 22:52:40
+  5 cycles   pick_place_ia
+==============================================================
+
+  Cycle  1 — ✓ Succès   (0m 58s)
+    PICK    cible   (0.4000, 0.1500, -0.0100) m
+           atteint (0.4000, 0.1500, -0.0100) m
+           écart   0.002 mm
+    PLACE   cible   (0.0000, 0.2500, 0.1000) m
+           atteint (-0.0000, 0.2500, 0.1000) m
+           écart   0.006 mm
+  Cycle  2 — ✓ Succès   (0m 59s)
+    PICK    cible   (0.4000, 0.1500, -0.0100) m
+           atteint (0.4000, 0.1500, -0.0100) m
+           écart   0.008 mm
+    PLACE   cible   (0.0000, 0.2500, 0.1000) m
+           atteint (-0.0000, 0.2500, 0.1000) m
+           écart   0.005 mm
+  Cycle  3 — ✓ Succès   (0m 58s)
+    PICK    cible   (0.4000, 0.1500, -0.0100) m
+           atteint (0.4000, 0.1500, -0.0100) m
+           écart   0.002 mm
+    PLACE   cible   (0.0000, 0.2500, 0.1000) m
+           atteint (-0.0000, 0.2500, 0.1000) m
+           écart   0.005 mm
+  Cycle  4 — ✗ ÉCHEC    (0m 54s)
+    PICK    cible   (0.4000, 0.1500, -0.0100) m
+           atteint (0.4000, 0.1500, -0.0100) m
+           écart   0.004 mm
+    PLACE   cible   (0.0000, 0.2500, 0.1000) m
+           atteint (-0.0000, 0.2500, 0.1000) m
+           écart   0.005 mm
+             › Mouvement 'HOME' échoué
+  Cycle  5 — ✗ ÉCHEC    (0m 30s)
+             › Mouvement 'HOME' échoué
+
+==============================================================
+  RÉSUMÉ
+--------------------------------------------------------------
+  Cycles réussis  :   3 / 5  (60.0 %)
+  Cycles échoués  :   2 / 5
+  Durée totale    : 4m 35s
+  Durée moyenne   : 0m 52s
+  Durée min / max : 0m 30s / 0m 59s
+
+==============================================================
+  RÉPÉTABILITÉ (écarts position)
+--------------------------------------------------------------
+  Point PICK  —  consigne (0.4000, 0.1500, -0.0100) m
+    Mesures (cycles avec FK OK) : 4 / 5
+    Erreur moyenne vs consigne  : 0.004 mm
+    Écart-type                  : 0.002 mm
+    Erreur min                  : 0.002 mm
+    Erreur max                  : 0.008 mm
+    Répétabilité ISO 9283       : 0.006 mm  (d̄ + 3σ au centroïde)
+
+  Point PLACE  —  consigne (0.0000, 0.2500, 0.1000) m
+    Mesures (cycles avec FK OK) : 4 / 5
+    Erreur moyenne vs consigne  : 0.005 mm
+    Écart-type                  : 0.000 mm
+    Erreur min                  : 0.005 mm
+    Erreur max                  : 0.006 mm
+    Répétabilité ISO 9283       : 0.001 mm  (d̄ + 3σ au centroïde)
+
+  ERREURS PAR ÉTAPE
+--------------------------------------------------------------
+  HOME                       2 échec(s)
+
+  ERREURS DÉTAILLÉES
+--------------------------------------------------------------
+  Cycle  4 : Mouvement 'HOME' échoué
+  Cycle  5 : Mouvement 'HOME' échoué
+==============================================================

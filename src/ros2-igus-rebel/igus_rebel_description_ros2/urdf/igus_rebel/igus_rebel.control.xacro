@@ -33,7 +33,7 @@
 				params="name position_min=0 position_max=0 cri_joint_offset=0">
 				<joint name="${name}">
 
-					<!-- Position control can be optionally deployed -->
+						<!-- Position control can be optionally deployed -->
 					<!--<command_interface
 					name="position">
 						<param name="min">${position_min}</param>

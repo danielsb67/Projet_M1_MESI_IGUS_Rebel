@@ -3,8 +3,9 @@
 
     <xacro:macro name="cameras" params="camera load_gazebo">
 
-        <!-- virtual frames for gazebo -->
-        <xacro:if value="${load_gazebo}">
+        <!-- virtual frames for gazebo — uniquement si une caméra est montée sur le bras -->
+        <!-- camera=none + load_gazebo=true → pas de camera_link → URDF cassé sans cette garde -->
+        <xacro:if value="${load_gazebo and camera != 'none'}">
             <xacro:include
                 filename="$(find igus_rebel_description_ros2)/urdf/cameras/virtual_camera_frames.xacro" />
             <xacro:virtual_camera_frames />

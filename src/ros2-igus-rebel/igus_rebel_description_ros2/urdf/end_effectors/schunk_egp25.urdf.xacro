@@ -24,7 +24,7 @@
              xyz : recentre Y (37.5mm) et Z (15mm) après rotation -->
         <origin xyz="0 -0.0375 0.015" rpy="0 0 -1.5708"/>
         <geometry>
-          <mesh filename="package://igus_rebel_description_ros2/meshes/end_effectors/effecteur_simplifie.stl"
+          <mesh filename="file://$(find igus_rebel_description_ros2)/meshes/end_effectors/effecteur_simplifie.stl"
                 scale="0.001 0.001 0.001"/>
         </geometry>
         <material name="effecteur_color"/>
@@ -61,6 +61,13 @@
     </joint>
 
     <link name="gripper_tip_link"/>
+
+    <!-- Gazebo : couleur de la pince (bleue) + friction -->
+    <gazebo reference="effecteur_simplifie_link">
+      <material>Gazebo/Blue</material>
+      <mu1>0.8</mu1>
+      <mu2>0.8</mu2>
+    </gazebo>
 
   </xacro:macro>
 </robot>

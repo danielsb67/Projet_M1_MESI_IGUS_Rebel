@@ -1,4 +1,22 @@
+# --- Artefacts de build ROS2 / colcon ---
 build/
 install/
 log/
 .vscode/
+
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+
+# --- Outils / environnement local ---
+.claude/
+
+# --- Modeles YOLO et poids entraines (volumineux, non versionnes) ---
+*.pt
+*.pth
+*.onnx
+*.engine
+*.weights
+*.zip
+src/yolo/yolo/best/

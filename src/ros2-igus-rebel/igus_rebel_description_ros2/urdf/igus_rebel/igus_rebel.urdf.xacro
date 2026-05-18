@@ -68,7 +68,9 @@
 		</xacro:if>
 
 		<!-- Chargement conditionnel du Schunk EGP25 (effecteur_simplifie.stl) -->
-		<xacro:if value="${end_effector == 'schunk_egp25'}">
+		<!-- Ne charger que si mount == 'none' pour éviter le conflit de joint parent=flange
+		     avec flange_to_mount défini dans mount_v1/mount_v2 -->
+		<xacro:if value="${end_effector == 'schunk_egp25' and mount == 'none'}">
 			<xacro:include filename="$(find igus_rebel_description_ros2)/urdf/end_effectors/schunk_egp25.urdf.xacro" />
 			<xacro:schunk_gripper />
 		</xacro:if>

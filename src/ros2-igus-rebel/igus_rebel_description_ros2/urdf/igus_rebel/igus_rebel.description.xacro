@@ -21,8 +21,7 @@
 			<collision>
 				<geometry>
 					<mesh
-						filename="file://$(find igus_rebel_description_ros2)/meshes/igus_rebel_mod/Joint0.stl"
-						scale="0.0001 0.0001 0.0001" />
+						filename="file://$(find igus_rebel_description_ros2)/meshes/igus_rebel/Joint0.dae" />
 				</geometry>
 			</collision>
 			<inertial>
@@ -51,8 +50,7 @@
 			<collision>
 				<geometry>
 					<mesh
-						filename="file://$(find igus_rebel_description_ros2)/meshes/igus_rebel_mod/Joint1.stl"
-						scale="0.0001 0.0001 0.0001" />
+						filename="file://$(find igus_rebel_description_ros2)/meshes/igus_rebel/Joint1.dae" />
 				</geometry>
 				<origin rpy="0 0 0" xyz="0 0 0" />
 			</collision>
@@ -83,8 +81,7 @@
 			<collision>
 				<geometry>
 					<mesh
-						filename="file://$(find igus_rebel_description_ros2)/meshes/igus_rebel_mod/Joint2.stl"
-						scale="0.0001 0.0001 0.0001" />
+						filename="file://$(find igus_rebel_description_ros2)/meshes/igus_rebel/Joint2.dae" />
 				</geometry>
 				<origin rpy="0 0 0" xyz="0 0 0" />
 			</collision>
@@ -115,8 +112,7 @@
 			<collision>
 				<geometry>
 					<mesh
-						filename="file://$(find igus_rebel_description_ros2)/meshes/igus_rebel_mod/Joint3.stl"
-						scale="0.0001 0.0001 0.0001" />
+						filename="file://$(find igus_rebel_description_ros2)/meshes/igus_rebel/Joint3.dae" />
 				</geometry>
 				<origin rpy="0 0 0" xyz="0 0 0" />
 			</collision>
@@ -147,8 +143,7 @@
 			<collision>
 				<geometry>
 					<mesh
-						filename="file://$(find igus_rebel_description_ros2)/meshes/igus_rebel_mod/Joint4.stl"
-						scale="0.0001 0.0001 0.0001" />
+						filename="file://$(find igus_rebel_description_ros2)/meshes/igus_rebel/Joint4.dae" />
 				</geometry>
 				<origin rpy="0 0 0" xyz="0 0 0" />
 			</collision>
@@ -179,8 +174,7 @@
 			<collision>
 				<geometry>
 					<mesh
-						filename="file://$(find igus_rebel_description_ros2)/meshes/igus_rebel_mod/Joint5.stl"
-						scale="0.0001 0.0001 0.0001" />
+						filename="file://$(find igus_rebel_description_ros2)/meshes/igus_rebel/Joint5.dae" />
 				</geometry>
 				<origin rpy="0 0 0" xyz="0 0 0" />
 			</collision>
@@ -211,8 +205,7 @@
 			<collision>
 				<geometry>
 					<mesh
-						filename="file://$(find igus_rebel_description_ros2)/meshes/igus_rebel_mod/Joint6.stl"
-						scale="0.0001 0.0001 0.0001" />
+						filename="file://$(find igus_rebel_description_ros2)/meshes/igus_rebel/Joint6.dae" />
 				</geometry>
 				<origin rpy="0 0 0" xyz="0.0 0 0" />
 			</collision>

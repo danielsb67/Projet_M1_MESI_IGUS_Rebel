@@ -220,8 +220,7 @@ def load_moveit(with_sensors3d: bool) -> list:
         "publish_planning_scene": True,
         "publish_geometry_updates": True,
         "publish_state_updates": True,
-        "publish_transforms_updates": True,
-        "planning_plugin": "ompl_interface/OMPLPlanner",
+        "publish_transforms_updates": False,
     }
 
     kinematics_yaml = load_yaml(

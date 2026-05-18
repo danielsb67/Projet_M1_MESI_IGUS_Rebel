@@ -32,17 +32,19 @@ stomp:
 pilz_industrial_motion_planner:
     planning_plugin: pilz_industrial_motion_planner/CommandPlanner
     # The order of the elements in the adapter corresponds to the order they are processed by the motion planning pipeline.
+    # NOTE: AddRuckigTrajectorySmoothing is intentionally removed from Pilz PTP.
+    # Ruckig requires at least 2 trajectory points to smooth; Pilz PTP can generate
+    # single-point trajectories (e.g. "goal already reached") which causes
+    # "not enough points to smooth" → corrupted trajectory → CONTROL_FAILED (-4).
     request_adapters: >-
-        default_planner_request_adapters/AddRuckigTrajectorySmoothing
         default_planner_request_adapters/AddTimeOptimalParameterization
         default_planner_request_adapters/FixStartStateBounds
         default_planner_request_adapters/FixStartStateCollision
         default_planner_request_adapters/FixStartStatePathConstraints
         default_planner_request_adapters/FixWorkspaceBounds
         default_planner_request_adapters/ResolveConstraintFrames
-        
 
-    default_planner_config: LIN
+    default_planner_config: PTP
     capabilities: >-
         pilz_industrial_motion_planner/MoveGroupSequenceAction
         pilz_industrial_motion_planner/MoveGroupSequenceService

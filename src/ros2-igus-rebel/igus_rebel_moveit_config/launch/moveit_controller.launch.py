@@ -100,8 +100,14 @@ def launch_setup(context, *args, **kwargs):
             {"use_sim_time": use_sim_time},
             moveit_loader.load_robot_description(),
             moveit_loader.load_robot_description_semantic(),
-        ] +
-        moveit_loader.load_moveit(with_sensors3d=False),
+            # NOTE: Ne pas passer load_moveit() ici. load_moveit() inclut
+            # planning_scene_monitor_parameters avec publish_planning_scene=True,
+            # ce qui démarre un second PlanningSceneMonitor en mode publication
+            # dans le processus rviz2 — provoquant le double message
+            # "Publishing maintained planning scene" dans les logs.
+            # RViz2 n'a besoin que de robot_description et robot_description_semantic
+            # pour que son plugin MoveIt fonctionne en mode abonné (lecture seule).
+        ],
         condition=IfCondition(
             PythonExpression(
                 ["'", LaunchConfiguration("rviz_file"), "' != 'none' "]

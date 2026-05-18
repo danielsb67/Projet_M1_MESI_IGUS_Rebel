@@ -86,11 +86,24 @@ def launch_setup(context, *args, **kwargs):
     env_gazebo_package = LaunchConfiguration("env_gazebo_package").perform(context)
     full_world_name = LaunchConfiguration("full_world_name").perform(context)
 
+    # Pour résoudre model://igus_rebel_description_ros2/... il faut exposer le PARENT
+    # de share/igus_rebel_description_ros2 (Ignition cherche model://<nom>/... dans
+    # chaque dossier listé). Le nom du package est utilisé comme nom de "model".
+    description_parent = os.path.dirname(get_package_share_directory("igus_rebel_description_ros2"))
+    description_share = get_package_share_directory("igus_rebel_description_ros2")
+    existing_resource_path = os.environ.get("IGN_GAZEBO_RESOURCE_PATH", "")
+    existing_gz_path = os.environ.get("GZ_SIM_RESOURCE_PATH", "")
+
+    paths = [existing_resource_path, description_parent, description_share]
     if env_gazebo_package != 'igus_rebel_gazebo_ignition':
         ignition_models_path = os.path.join(
             get_package_share_directory(env_gazebo_package), "models",
         )
-        os.environ["IGN_GAZEBO_RESOURCE_PATH"] = ignition_models_path
+        paths.insert(2, ignition_models_path)
+
+    resource_paths = ":".join(filter(None, paths))
+    os.environ["IGN_GAZEBO_RESOURCE_PATH"] = resource_paths
+    os.environ["GZ_SIM_RESOURCE_PATH"] = ":".join(filter(None, [existing_gz_path, resource_paths]))
 
     # Additional bridge for joint state if Moveit is not used (only for visualization of the description)
     # and related gui with or without the joint position controller gui
