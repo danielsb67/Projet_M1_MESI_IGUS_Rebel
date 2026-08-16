@@ -1,5 +1,33 @@
 # PROGRESS — Projet IGUS ReBeL : toutes les étapes
 
+---
+
+## ⏸ 2026-08-16 (soir) — PROJET EN PAUSE (état propre, tout commité et poussé)
+
+**Reprise — première commande (run RL n° 2, tout est prêt et validé)** :
+```bash
+IGUS_RL_REWARD_MODE=dense IGUS_RL_MAX_STEPS=450 DUREE_S=3600 \
+  bash src/igus_vla/scripts/train_rl_pilote.sh
+```
+(le pilote câble tout seul le dataset dense `datasets/lerobot_v2_2_rl_demos_dense`,
+déjà converti et vérifié ; signal à guetter : « Episode reward » qui grimpe et
+des épisodes finissant avant le plafond ; plancher de température PAS implémenté
+— si la température s'effondre encore malgré le dense, c'est le chantier suivant).
+
+**État au moment de la pause** :
+- **v2_4 champion : 76 % (38/50)** vs v2.2 62 %, dos à dos — probable (+7 apparié,
+  p=0,072), à confirmer avec les 20 positions historiques incluses ;
+- Pilote RL n° 1 (2 h, sparse) : plomberie 100 % validée, apprentissage NO-GO
+  (température effondrée) ; corrections dense complètes livrées et testées ;
+- **Dépôt public** : https://github.com/danielsb67/igus-rebel-vla-rl (audité) ;
+- Branche `worktree-ameliorations-nuit` poussée (IHM améliorée NON mergée —
+  contrôle visuel à l'écran avant merge ; fichiers RL déployés dans le checkout
+  principal, identiques à la branche) ;
+- Backlog inchangé : DAgger (états absorbants = sa cible), confirmation du +14,
+  éval timeout maintenue à 45 s (question tranchée), chariot Igus v3.
+
+---
+
 > Document unique de suivi. Les anciens suivis détaillés (VLA_PROGRESS, HANDOFF,
 > progress_ihm, plans v1/v2…) sont dans [archives/](archives/) — voir
 > [archives/README.md](archives/README.md).
