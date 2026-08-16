@@ -275,29 +275,51 @@ class CameraFeed:
 # ============================================================================
 #  Utilitaires
 # ============================================================================
+# Cache incrémental de _dataset_stats : {raw_root: {episode: (mtime, succès,
+# pick)}}. Le rafraîchissement 3 s ne re-parse que les meta.json nouveaux ou
+# modifiés (un stat() par épisode au lieu d'un open+json.loads).
+_STATS_CACHE: dict[str, dict] = {}
+
+
 def _dataset_stats(raw_root: Path) -> dict:
     """Lit le dossier dataset/raw et renvoie {total, success, fail, last_pick}."""
     stats = {"total": 0, "success": 0, "fail": 0, "last_pick": None}
     if not raw_root.exists():
+        _STATS_CACHE.pop(str(raw_root), None)
         return stats
+    cache = _STATS_CACHE.setdefault(str(raw_root), {})
+    vus = set()
     for ep_dir in sorted(raw_root.glob("episode_*")):
         meta_file = ep_dir / "meta.json"
-        if not meta_file.exists():
-            continue
         try:
-            meta = json.loads(meta_file.read_text())
-        except Exception:  # noqa: BLE001
+            mtime = meta_file.stat().st_mtime
+        except OSError:
             continue
+        vus.add(ep_dir.name)
+        entree = cache.get(ep_dir.name)
+        if entree is None or entree[0] != mtime:
+            try:
+                meta = json.loads(meta_file.read_text())
+            except Exception:  # noqa: BLE001
+                continue
+            pick = None
+            if "pick_x" in meta and "pick_y" in meta:
+                px, py = meta["pick_x"], meta["pick_y"]
+                if not (isinstance(px, float) and px != px):  # exclude NaN
+                    pick = (px, py)
+            entree = (mtime, bool(meta.get("success")), pick)
+            cache[ep_dir.name] = entree
         stats["total"] += 1
-        if meta.get("success"):
+        if entree[1]:
             stats["success"] += 1
         else:
             stats["fail"] += 1
-        # Dernière position pick connue
-        if "pick_x" in meta and "pick_y" in meta:
-            px, py = meta["pick_x"], meta["pick_y"]
-            if not (isinstance(px, float) and px != px):  # exclude NaN
-                stats["last_pick"] = (px, py)
+        if entree[2] is not None:
+            stats["last_pick"] = entree[2]
+    # Épisodes disparus (dataset purgé/refiltré) : purge du cache
+    for nom in list(cache):
+        if nom not in vus:
+            del cache[nom]
     return stats
 
 
@@ -1813,7 +1835,14 @@ class IhmVla(tk.Tk):
         elapsed = self._task_elapsed
 
         if self._task_kind == "record":
-            self._monitor_record(running, elapsed)
+            # Après la fin du run : un DERNIER rendu (figé « terminé ✓ »)
+            # puis on cesse de relire le CSV chaque seconde pour toujours.
+            if running:
+                self._task_final_done = False
+                self._monitor_record(running, elapsed)
+            elif not getattr(self, "_task_final_done", False):
+                self._monitor_record(running, elapsed)
+                self._task_final_done = True
         elif self._task_kind in ("convert", "train", "other") and \
                 (running or self._task_total or self._task_pct):
             self._monitor_generic(running, elapsed)

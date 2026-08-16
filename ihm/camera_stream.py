@@ -35,10 +35,12 @@ from sensor_msgs.msg import Image, JointState
 class CameraStream(Node):
     """Souscrit N topics image + /joint_states, écrit <out>/… à cadence bornée."""
 
-    def __init__(self, out_dir: str, topics: dict, hz: float, ext: str) -> None:
+    def __init__(self, out_dir: str, topics: dict, hz: float, ext: str,
+                 max_width: int = 0) -> None:
         super().__init__("ihm_camera_stream")
         self._out = out_dir
         self._ext = ext.lstrip(".")
+        self._max_w = max(0, int(max_width))
         os.makedirs(out_dir, exist_ok=True)
         self._latest: dict = {}
         self._dirty: set = set()
@@ -83,6 +85,13 @@ class CameraStream(Node):
                 arr = arr.reshape(msg.height, msg.step)[:, : msg.width * 3]
                 arr = arr.reshape(msg.height, msg.width, 3)
                 bgr = arr[:, :, ::-1] if msg.encoding == "rgb8" else arr
+                # --max-width : réduit AVANT écriture (moins d'IO et plus de
+                # subsample côté Tk). 0 = comportement historique, inchangé.
+                if self._max_w and bgr.shape[1] > self._max_w:
+                    ratio = self._max_w / bgr.shape[1]
+                    bgr = cv2.resize(
+                        bgr, (self._max_w, max(1, int(bgr.shape[0] * ratio))),
+                        interpolation=cv2.INTER_AREA)
                 final = os.path.join(self._out, f"{name}.{self._ext}")
                 # tmp DOIT garder l'extension image : cv2.imwrite en déduit le format.
                 tmp = os.path.join(self._out, f".{name}.tmp.{self._ext}")
@@ -103,6 +112,8 @@ def main() -> None:
                         help="Cadence max d'écriture par flux (défaut : 15 Hz)")
     parser.add_argument("--ext", default="ppm", choices=("ppm", "png"),
                         help="Format image (ppm = rapide/RAM ; png = compact)")
+    parser.add_argument("--max-width", type=int, default=0,
+                        help="Largeur max écrite en px (0 = pleine résolution)")
     args = parser.parse_args()
 
     topics = {}
@@ -115,7 +126,7 @@ def main() -> None:
         topics = {"front": "/front_camera/image", "wrist": "/wrist_camera/image"}
 
     rclpy.init()
-    node = CameraStream(args.out, topics, args.hz, args.ext)
+    node = CameraStream(args.out, topics, args.hz, args.ext, args.max_width)
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:

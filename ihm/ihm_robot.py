@@ -270,6 +270,22 @@ ROUGE_BG  = "#ffebee"   # rouge clair (fond)
 GRIS      = "#6b7280"   # gris (texte secondaire / inactif)
 ORANGE    = "#ef6c00"   # orange (connexion en cours / simu)
 JAUNE     = "#f9a825"   # jaune (warning / hold)
+TEXTE     = "#1f2937"   # texte principal (ardoise foncée)
+
+
+def _assombrir(couleur, facteur):
+    """Assombrit une couleur '#rrggbb' (facteur < 1). Renvoie la couleur
+    inchangée si le format n'est pas un hex 7 caractères (nom Tk, etc.)."""
+    try:
+        if not (isinstance(couleur, str) and len(couleur) == 7
+                and couleur.startswith('#')):
+            return couleur
+        r = max(0, min(255, int(int(couleur[1:3], 16) * facteur)))
+        g = max(0, min(255, int(int(couleur[3:5], 16) * facteur)))
+        b = max(0, min(255, int(int(couleur[5:7], 16) * facteur)))
+        return "#%02x%02x%02x" % (r, g, b)
+    except ValueError:
+        return couleur
 
 POLICE = "monospace"
 
@@ -886,12 +902,15 @@ class LLMPlanner:
 class StatsManager:
     """Gère toutes les statistiques d'usage (cycles, fatigue, erreurs, etc.).
 
-    Persistées dans ~/Bureau/ihm_robot/stats.json. Une sauvegarde est faite à
-    chaque modification ; les volumes restent modestes (kilo-octets).
+    Persistées dans ~/Bureau/ihm_robot/stats.json. Les modifications marquent
+    un drapeau « sale » ; l'écriture disque réelle est différée à flush()
+    (boucle sysmon 2,5 s + fermeture) pour éviter un json.dump synchrone à
+    chaque cycle/mouvement (latence, usure carte SD).
     """
 
     def __init__(self):
         self._lock = Lock()
+        self._dirty = False
         self.data = self._charger()
 
     # -- chargement / sauvegarde --------------------------------------- #
@@ -935,10 +954,21 @@ class StatsManager:
         return self._modele_vide()
 
     def _sauver(self):
+        # Appelé sous self._lock : marque seulement ; l'écriture réelle
+        # a lieu dans flush() (jamais sous le verrou d'un appelant).
+        self._dirty = True
+
+    def flush(self, force=False):
+        """Écrit stats.json si des modifications sont en attente."""
+        with self._lock:
+            if not (self._dirty or force):
+                return
+            self._dirty = False
+            contenu = json.dumps(self.data, indent=2)
         try:
             USER_DIR.mkdir(parents=True, exist_ok=True)
             with open(STATS_FILE, 'w') as f:
-                json.dump(self.data, f, indent=2)
+                f.write(contenu)
         except Exception:
             pass
 
@@ -948,6 +978,9 @@ class StatsManager:
             self.data["session_demarree_iso"] = (
                 datetime.now().isoformat(timespec='seconds'))
             self._sauver()
+        # Début de session persisté tout de suite (le compteur de temps de
+        # fonctionnement repose sur cet horodatage en cas de crash).
+        self.flush(force=True)
 
     def session_stop(self):
         with self._lock:
@@ -962,6 +995,8 @@ class StatsManager:
                     pass
             self.data["session_demarree_iso"] = None
             self._sauver()
+        # Fin de session = écriture immédiate garantie (fermeture d'IHM)
+        self.flush(force=True)
 
     def temps_total_s(self):
         """Temps cumulé + temps de la session courante si en cours."""
@@ -1412,6 +1447,10 @@ class IHMRobot:
         # pour pouvoir filtrer / exporter sans relire le widget.
         self.journal_lignes = []   # [(ligne_str, "info"|"erreur"), ...]
         self.filtre_journal = "tout"  # "tout" / "info" / "erreur"
+        # File thread-safe des lignes en attente d'affichage : vidée par lots
+        # toutes les 100 ms (_boucle_journal) au lieu d'un after() par ligne —
+        # un launch MoveIt/Gazebo crache des centaines de lignes/s.
+        self._journal_queue = deque()
 
         # Positions personnalisées (chargées depuis disque)
         self.positions_perso = self._charger_positions()
@@ -1547,6 +1586,7 @@ class IHMRobot:
         self._boucle_watchdog()
         self._boucle_position_live()
         self._boucle_chrono()
+        self._boucle_journal()
         self._boucle_anomalie()
 
     # ------------------------------------------------------------------ #
@@ -1558,11 +1598,34 @@ class IHMRobot:
         police = (POLICE, fs, "bold" if bold else "normal")
         b = tk.Button(parent, text=texte, command=cmd, bg=bg, fg=fg,
                        font=police, relief="flat", bd=0,
-                       activebackground=bg, activeforeground=fg,
+                       activebackground=_assombrir(bg, 0.85),
+                       activeforeground=fg,
                        pady=pady, padx=padx, state=state,
                        cursor="hand2")
         if width:
             b.configure(width=width)
+
+        # Feedback visuel au survol/appui. Les couleurs sont relues à chaque
+        # entrée du curseur (cget) car plusieurs boutons changent de bg
+        # dynamiquement (mode simu, vocal, répétabilité, courbes…) ; au
+        # départ du curseur on ne restaure que si personne n'a changé la
+        # couleur entre-temps.
+        def _survol_entree(_e, b=b):
+            if b["state"] == "disabled":
+                return
+            base = b.cget("bg")
+            survol = _assombrir(base, 0.92)
+            b._survol_pair = (base, survol)
+            b.configure(bg=survol, activebackground=_assombrir(base, 0.85))
+
+        def _survol_sortie(_e, b=b):
+            pair = getattr(b, "_survol_pair", None)
+            b._survol_pair = None
+            if pair and b.cget("bg") == pair[1]:
+                b.configure(bg=pair[0])
+
+        b.bind("<Enter>", _survol_entree, add="+")
+        b.bind("<Leave>", _survol_sortie, add="+")
         return b
 
     def section(self, parent, titre):
@@ -1570,7 +1633,7 @@ class IHMRobot:
         carte = tk.Frame(parent, bg=CARD, highlightbackground=BORDURE,
                           highlightthickness=1, bd=0)
         carte.pack(fill="x", padx=14, pady=8)
-        tk.Label(carte, text=titre, bg=CARD, fg="#1f2937",
+        tk.Label(carte, text=titre, bg=CARD, fg=TEXTE,
                  font=(POLICE, 13, "bold")).pack(anchor="w", padx=14, pady=(12, 4))
         contenu = tk.Frame(carte, bg=CARD)
         contenu.pack(fill="x", padx=14, pady=(0, 12))
@@ -1766,8 +1829,31 @@ class IHMRobot:
             style.theme_use('clam')
         except tk.TclError:
             pass
-        style.configure("Grand.TCombobox", font=(POLICE, 13), padding=8)
+        # Habille les widgets ttk aux couleurs de l'IHM (le clam par défaut
+        # est gris et jure au milieu des cartes blanches).
+        style.configure("Grand.TCombobox", font=(POLICE, 13), padding=8,
+                        fieldbackground=CARD, background=CARD,
+                        foreground=TEXTE, arrowcolor=BLEU,
+                        bordercolor=BORDURE, lightcolor=CARD, darkcolor=CARD)
+        style.map("Grand.TCombobox",
+                  fieldbackground=[("readonly", CARD)],
+                  foreground=[("readonly", TEXTE)])
+        style.configure("TCombobox",
+                        fieldbackground=CARD, background=CARD,
+                        foreground=TEXTE, arrowcolor=BLEU,
+                        bordercolor=BORDURE, lightcolor=CARD, darkcolor=CARD)
+        style.map("TCombobox",
+                  fieldbackground=[("readonly", CARD)],
+                  foreground=[("readonly", TEXTE)])
+        style.configure("Vertical.TScrollbar",
+                        background=BORDURE, troughcolor=FOND,
+                        bordercolor=FOND, arrowcolor=GRIS,
+                        lightcolor=BORDURE, darkcolor=BORDURE)
         self.root.option_add('*TCombobox*Listbox.font', (POLICE, 13))
+        self.root.option_add('*TCombobox*Listbox.background', CARD)
+        self.root.option_add('*TCombobox*Listbox.foreground', TEXTE)
+        self.root.option_add('*TCombobox*Listbox.selectBackground', BLEU)
+        self.root.option_add('*TCombobox*Listbox.selectForeground', CARD)
 
         self.var_mode = tk.StringVar(value=list(MODES.keys())[0])
         self.combo_mode = ttk.Combobox(c, textvariable=self.var_mode,
@@ -1813,7 +1899,7 @@ class IHMRobot:
         self.lbl_mode_statut.pack(side="left")
 
         self.lbl_chrono = tk.Label(info, text="⏱ 00:00:00",
-                                   bg=CARD, fg="#1f2937",
+                                   bg=CARD, fg=TEXTE,
                                    font=(POLICE, 10, "bold"))
         self.lbl_chrono.pack(side="right")
 
@@ -1875,7 +1961,7 @@ class IHMRobot:
             ligne = tk.Frame(grille, bg=CARD)
             ligne.pack(fill="x", pady=4)
 
-            tk.Label(ligne, text="joint%d" % (i + 1), bg=CARD, fg="#1f2937",
+            tk.Label(ligne, text="joint%d" % (i + 1), bg=CARD, fg=TEXTE,
                      font=(POLICE, 12, "bold"), width=8,
                      anchor="w").pack(side="left")
 
@@ -2015,6 +2101,10 @@ class IHMRobot:
         if not self.courbes_visible:
             return
         cv = self.canvas_courbes
+        # Pas de tracé si le canvas n'est pas affiché (fenêtre réduite,
+        # section masquée) — le <Configure> redessinera au retour.
+        if not cv.winfo_ismapped():
+            return
         cv.delete("all")
         w = max(1, cv.winfo_width())
         h = COURBES_HAUTEUR
@@ -2024,7 +2114,7 @@ class IHMRobot:
         if not all_vals:
             cv.create_text(w / 2, h / 2,
                            text="En attente de /joint_states…",
-                           fill="#6b7280", font=(POLICE, 10))
+                           fill=GRIS, font=(POLICE, 10))
             self.lbl_courbes_yscale.configure(text="")
             return
 
@@ -2337,7 +2427,7 @@ class IHMRobot:
         ligne = tk.Frame(c, bg=CARD)
         ligne.pack(fill="x")
 
-        tk.Label(ligne, text="x (m) :", bg=CARD, fg="#1f2937",
+        tk.Label(ligne, text="x (m) :", bg=CARD, fg=TEXTE,
                  font=(POLICE, 12)).pack(side="left", padx=(0, 6))
 
         self.entry_portee_x = tk.Entry(
@@ -2349,7 +2439,7 @@ class IHMRobot:
                       bg=BLEU, fs=11, pady=8).pack(side="left")
 
         self.lbl_portee_res = tk.Label(
-            c, text="y maxi : —", bg=CARD, fg="#1f2937",
+            c, text="y maxi : —", bg=CARD, fg=TEXTE,
             font=(POLICE, 13, "bold"))
         self.lbl_portee_res.pack(anchor="w", pady=(10, 0))
 
@@ -2660,7 +2750,7 @@ class IHMRobot:
 
         # En-tête : nom de la séquence
         tk.Label(dlg, text="Nom de la séquence",
-                 bg=FOND, fg="#1f2937",
+                 bg=FOND, fg=TEXTE,
                  font=(POLICE, 11, "bold")).pack(anchor="w", padx=20,
                                                    pady=(16, 2))
         e_nom = tk.Entry(dlg, font=(POLICE, 12), relief="flat",
@@ -2670,7 +2760,7 @@ class IHMRobot:
 
         # Liste des étapes (Listbox + scrollbar)
         tk.Label(dlg, text="Étapes",
-                 bg=FOND, fg="#1f2937",
+                 bg=FOND, fg=TEXTE,
                  font=(POLICE, 11, "bold")).pack(anchor="w", padx=20)
 
         cadre_lst = tk.Frame(dlg, bg=FOND)
@@ -2799,7 +2889,7 @@ class IHMRobot:
         resultat = {"etape": None}
 
         tk.Label(dlg, text="Type d'étape",
-                 bg=FOND, fg="#1f2937",
+                 bg=FOND, fg=TEXTE,
                  font=(POLICE, 11, "bold")).pack(anchor="w", padx=20,
                                                    pady=(16, 4))
         var_type = tk.StringVar(value="move")
@@ -2807,7 +2897,7 @@ class IHMRobot:
                           ("pince", "Action pince"),
                           ("pause", "Pause")):
             tk.Radiobutton(dlg, text=lib, variable=var_type, value=val,
-                           bg=FOND, fg="#1f2937", selectcolor="white",
+                           bg=FOND, fg=TEXTE, selectcolor="white",
                            font=(POLICE, 10),
                            command=lambda: _maj_form()).pack(
                 anchor="w", padx=20)
@@ -2827,7 +2917,7 @@ class IHMRobot:
             if t == "move":
                 tk.Label(frame_form,
                          text="Position (consigne actuelle ou enregistrée)",
-                         bg=FOND, fg="#1f2937",
+                         bg=FOND, fg=TEXTE,
                          font=(POLICE, 10, "bold")).pack(anchor="w")
                 noms = ["[consigne actuelle des Entry]"]
                 noms += [n for n, _ in self._positions_usine]
@@ -2839,7 +2929,7 @@ class IHMRobot:
                              font=(POLICE, 10)).pack(fill="x", pady=(0, 8))
             elif t == "pince":
                 tk.Label(frame_form, text="Action",
-                         bg=FOND, fg="#1f2937",
+                         bg=FOND, fg=TEXTE,
                          font=(POLICE, 10, "bold")).pack(anchor="w")
                 for val, lib in (("ouvrir", "Ouvrir la pince"),
                                   ("fermer", "Fermer la pince")):
@@ -2849,7 +2939,7 @@ class IHMRobot:
                                    selectcolor="white").pack(anchor="w")
             elif t == "pause":
                 tk.Label(frame_form, text="Durée (secondes, 0.5 → 30)",
-                         bg=FOND, fg="#1f2937",
+                         bg=FOND, fg=TEXTE,
                          font=(POLICE, 10, "bold")).pack(anchor="w")
                 tk.Scale(frame_form, from_=0.5, to=30, resolution=0.5,
                          orient="horizontal", variable=var_pause,
@@ -2911,12 +3001,12 @@ class IHMRobot:
 
         # Vitesse (durée d'une trajectoire)
         tk.Label(c, text="Vitesse — durée d'une trajectoire (s)",
-                 bg=CARD, fg="#1f2937",
+                 bg=CARD, fg=TEXTE,
                  font=(POLICE, 11, "bold")).pack(anchor="w")
         self.var_vitesse = tk.IntVar(value=VITESSE_DEFAUT)
         self.scale_vitesse = tk.Scale(
             c, from_=1, to=10, orient="horizontal",
-            variable=self.var_vitesse, bg=CARD, fg="#1f2937",
+            variable=self.var_vitesse, bg=CARD, fg=TEXTE,
             troughcolor=FOND, highlightthickness=0, relief="flat",
             length=200, font=(POLICE, 10),
             command=self._on_vitesse)
@@ -2924,7 +3014,7 @@ class IHMRobot:
 
         # Incrément des boutons +/-
         tk.Label(c, text="Incrément des boutons +/- (degrés)",
-                 bg=CARD, fg="#1f2937",
+                 bg=CARD, fg=TEXTE,
                  font=(POLICE, 11, "bold")).pack(anchor="w", pady=(8, 0))
         self.var_inc = tk.DoubleVar(value=INC_DEG_DEFAUT)
         ligne = tk.Frame(c, bg=CARD)
@@ -2932,7 +3022,7 @@ class IHMRobot:
         for val in (1.0, 5.0, 10.0, 30.0):
             tk.Radiobutton(
                 ligne, text="%g°" % val, variable=self.var_inc, value=val,
-                bg=CARD, fg="#1f2937", selectcolor=FOND,
+                bg=CARD, fg=TEXTE, selectcolor=FOND,
                 font=(POLICE, 11),
                 command=self._on_inc).pack(side="left", expand=True)
 
@@ -3019,7 +3109,7 @@ class IHMRobot:
         for i in range(1, 7):
             ligne = tk.Frame(grille, bg=CARD)
             ligne.pack(fill="x", pady=3)
-            tk.Label(ligne, text="joint%d" % i, bg=CARD, fg="#1f2937",
+            tk.Label(ligne, text="joint%d" % i, bg=CARD, fg=TEXTE,
                      font=(POLICE, 11, "bold"), width=8,
                      anchor="w").pack(side="left")
 
@@ -3108,7 +3198,7 @@ class IHMRobot:
         self.lbl_vocal_statut.pack(anchor="w")
 
         self.lbl_vocal_dernier = tk.Label(
-            c, text="", bg=CARD, fg="#1f2937",
+            c, text="", bg=CARD, fg=TEXTE,
             font=(POLICE, 10, "italic"), wraplength=560,
             justify="left", anchor="w")
         self.lbl_vocal_dernier.pack(anchor="w", fill="x", pady=(2, 8))
@@ -3225,7 +3315,7 @@ class IHMRobot:
 
         # Champ de commande
         tk.Label(c, text="Commande :",
-                 bg=CARD, fg="#1f2937",
+                 bg=CARD, fg=TEXTE,
                  font=(POLICE, 11, "bold")).pack(anchor="w")
         ligne_cmd = tk.Frame(c, bg=CARD)
         ligne_cmd.pack(fill="x")
@@ -3263,14 +3353,14 @@ class IHMRobot:
 
         # Zone d'affichage de l'interprétation
         tk.Label(c, text="Interprétation :",
-                 bg=CARD, fg="#1f2937",
+                 bg=CARD, fg=TEXTE,
                  font=(POLICE, 11, "bold")).pack(anchor="w", pady=(8, 2))
 
         cadre = tk.Frame(c, bg=CARD)
         cadre.pack(fill="x")
         scroll = ttk.Scrollbar(cadre, orient="vertical")
         self.text_ia_plan = tk.Text(cadre, height=10, font=(POLICE, 10),
-                                     bg="#fafbfc", fg="#1f2937",
+                                     bg="#fafbfc", fg=TEXTE,
                                      relief="flat", bd=4, wrap="word",
                                      yscrollcommand=scroll.set,
                                      state="disabled")
@@ -3284,7 +3374,7 @@ class IHMRobot:
         self.text_ia_plan.tag_configure("ok", foreground=VERT)
         self.text_ia_plan.tag_configure("step",
                                         font=(POLICE, 10),
-                                        foreground="#1f2937")
+                                        foreground=TEXTE)
 
         # Boutons d'exécution
         ligne_btn = tk.Frame(c, bg=CARD)
@@ -3576,7 +3666,7 @@ class IHMRobot:
         sep.pack(fill="x", pady=8)
 
         tk.Label(c, text="Nouvelle zone (saisie manuelle)",
-                 bg=CARD, fg="#1f2937",
+                 bg=CARD, fg=TEXTE,
                  font=(POLICE, 10, "bold")).pack(anchor="w")
 
         ligne = tk.Frame(c, bg=CARD)
@@ -3627,7 +3717,7 @@ class IHMRobot:
             ligne.pack(fill="x", pady=2)
             tk.Label(ligne,
                      text="📍 %s" % nom,
-                     bg=CARD, fg="#1f2937",
+                     bg=CARD, fg=TEXTE,
                      font=(POLICE, 11, "bold"),
                      anchor="w").pack(side="left", padx=(0, 8))
             tk.Label(ligne,
@@ -3709,7 +3799,7 @@ class IHMRobot:
         sep.pack(fill="x", pady=8)
 
         tk.Label(c, text="Ajouter un objet",
-                 bg=CARD, fg="#1f2937",
+                 bg=CARD, fg=TEXTE,
                  font=(POLICE, 10, "bold")).pack(anchor="w")
 
         grille = tk.Frame(c, bg=CARD)
@@ -3742,7 +3832,7 @@ class IHMRobot:
             ligne = tk.Frame(self.frame_catalogue, bg=CARD)
             ligne.pack(fill="x", pady=2)
             tk.Label(ligne, text="🎯 %s" % nom,
-                     bg=CARD, fg="#1f2937",
+                     bg=CARD, fg=TEXTE,
                      font=(POLICE, 11, "bold")).pack(side="left",
                                                        padx=(0, 8))
             tk.Label(ligne,
@@ -3818,7 +3908,7 @@ class IHMRobot:
         sep1.pack(fill="x", pady=8)
 
         tk.Label(c, text="Test de répétabilité",
-                 bg=CARD, fg="#1f2937",
+                 bg=CARD, fg=TEXTE,
                  font=(POLICE, 11, "bold")).pack(anchor="w")
         tk.Label(c,
                  text="Aller-retours entre deux positions ; calcule "
@@ -3841,7 +3931,7 @@ class IHMRobot:
         sep2.pack(fill="x", pady=4)
 
         tk.Label(c, text="Rapport d'exploitation",
-                 bg=CARD, fg="#1f2937",
+                 bg=CARD, fg=TEXTE,
                  font=(POLICE, 11, "bold")).pack(anchor="w", pady=(4, 0))
 
         ligne = tk.Frame(c, bg=CARD)
@@ -3913,7 +4003,7 @@ class IHMRobot:
         dlg.grab_set()
 
         tk.Label(dlg, text="Test de répétabilité",
-                 bg=FOND, fg="#1f2937",
+                 bg=FOND, fg=TEXTE,
                  font=(POLICE, 13, "bold")).pack(padx=20, pady=(16, 4))
         tk.Label(dlg, text="Le robot effectuera N aller-retours entre A et B.",
                  bg=FOND, fg=GRIS,
@@ -3922,7 +4012,7 @@ class IHMRobot:
         noms = sorted(positions.keys())
 
         def _ligne(parent, libelle):
-            tk.Label(parent, text=libelle, bg=FOND, fg="#1f2937",
+            tk.Label(parent, text=libelle, bg=FOND, fg=TEXTE,
                      font=(POLICE, 10, "bold")).pack(anchor="w", padx=20)
 
         _ligne(dlg, "Position A")
@@ -4228,7 +4318,7 @@ class IHMRobot:
         dlg.transient(self.root)
         dlg.grab_set()
 
-        tk.Label(dlg, text="Configuration SMTP", bg=FOND, fg="#1f2937",
+        tk.Label(dlg, text="Configuration SMTP", bg=FOND, fg=TEXTE,
                  font=(POLICE, 13, "bold")).pack(padx=20, pady=(16, 4))
         tk.Label(dlg,
                  text="Pour Gmail : utilisez un « mot de passe d'application ».",
@@ -4238,7 +4328,7 @@ class IHMRobot:
         entries = {}
 
         def _champ(libelle, cle, secret=False):
-            tk.Label(dlg, text=libelle, bg=FOND, fg="#1f2937",
+            tk.Label(dlg, text=libelle, bg=FOND, fg=TEXTE,
                      font=(POLICE, 10, "bold")).pack(anchor="w", padx=20)
             e = tk.Entry(dlg, font=(POLICE, 11), relief="flat", bg="white",
                          bd=4, show="•" if secret else "")
@@ -4304,7 +4394,7 @@ class IHMRobot:
                  justify="left").pack(anchor="w", pady=(0, 6))
 
         self.lbl_anomalie_statut = tk.Label(
-            c, text="Statut : —", bg=CARD, fg="#1f2937",
+            c, text="Statut : —", bg=CARD, fg=TEXTE,
             font=(POLICE, 11, "bold"))
         self.lbl_anomalie_statut.pack(anchor="w")
 
@@ -4537,7 +4627,7 @@ class IHMRobot:
                          ("erreur", "Erreurs")):
             tk.Radiobutton(
                 barre, text=lib, variable=self.var_filtre, value=val,
-                bg=CARD, fg="#1f2937", selectcolor=FOND,
+                bg=CARD, fg=TEXTE, selectcolor=FOND,
                 font=(POLICE, 10),
                 command=self._on_filtre_journal).pack(side="left", padx=(0, 8))
 
@@ -4568,17 +4658,28 @@ class IHMRobot:
         # Écrit sur disque AVANT de planifier l'affichage Tk : si Tk crashe,
         # la ligne est déjà sauvegardée (line-buffered + flush automatique).
         _crash_log_write(ligne)
-        self.root.after(0, self._append_journal, ligne, niveau)
+        self._journal_queue.append((ligne, niveau))
 
-    def _append_journal(self, ligne, niveau="info"):
-        self.journal_lignes.append((ligne, niveau))
-        # Cap mémoire : 1000 lignes
-        if len(self.journal_lignes) > 1000:
-            self.journal_lignes = self.journal_lignes[-1000:]
-
-        # N'écrit que si le filtre courant l'autorise
-        if self._ligne_visible(niveau):
-            self._ecrire_dans_journal(ligne, niveau)
+    def _boucle_journal(self):
+        """Vide la file du journal par lots : une seule écriture Tk par
+        100 ms quel que soit le débit des sous-processus (l'ancien
+        after() par ligne gelait l'UI au lancement des modes)."""
+        lot = []
+        q = self._journal_queue
+        while True:
+            try:
+                lot.append(q.popleft())
+            except IndexError:
+                break
+        if lot:
+            self.journal_lignes.extend(lot)
+            # Cap mémoire : 1000 lignes
+            if len(self.journal_lignes) > 1000:
+                self.journal_lignes = self.journal_lignes[-1000:]
+            visibles = [(l, n) for l, n in lot if self._ligne_visible(n)]
+            if visibles:
+                self._ecrire_lot_dans_journal(visibles)
+        self.root.after(100, self._boucle_journal)
 
     def _ligne_visible(self, niveau):
         f = self.filtre_journal
@@ -4590,12 +4691,13 @@ class IHMRobot:
             return niveau != "erreur"
         return True
 
-    def _ecrire_dans_journal(self, ligne, niveau):
+    def _ecrire_lot_dans_journal(self, lignes):
         self.journal.configure(state="normal")
-        if niveau == "erreur":
-            self.journal.insert(tk.END, ligne + "\n", "erreur")
-        else:
-            self.journal.insert(tk.END, ligne + "\n")
+        for ligne, niveau in lignes:
+            if niveau == "erreur":
+                self.journal.insert(tk.END, ligne + "\n", "erreur")
+            else:
+                self.journal.insert(tk.END, ligne + "\n")
         # Limite à ~500 lignes affichées
         nb = int(self.journal.index('end-1c').split('.')[0])
         if nb > 500:
@@ -4666,6 +4768,9 @@ class IHMRobot:
         else:
             parts.append("Temp —")
         self.lbl_sysmon.configure(text="  ".join(parts))
+        # Écriture différée des stats (dirty-flag) : au plus une toutes
+        # les 2,5 s au lieu d'un json.dump par événement.
+        self.stats.flush()
         self.root.after(2500, self._boucle_sysmon)
 
     def _boucle_position_live(self):
@@ -4675,13 +4780,17 @@ class IHMRobot:
                 lbl.configure(text="—", fg=GRIS)
         else:
             for lbl, a in zip(self.labels_live, angles):
-                lbl.configure(text="%+6.1f°" % a, fg="#1f2937")
+                lbl.configure(text="%+6.1f°" % a, fg=TEXTE)
             # Met à jour min/max pour le diagnostic de fatigue
             self.stats.tracker_joints(angles)
-            # Alimente les courbes temps réel
+            # Alimente les courbes temps réel ; redessin 1 tick sur 2
+            # (2,5 Hz suffisent à l'œil, le tracé complet coûte ~900
+            # segments recréés à chaque passage)
             for buf, a in zip(self.courbes_buffers, angles):
                 buf.append(a)
-            self._redessiner_courbes()
+            self._courbes_tick = getattr(self, '_courbes_tick', 0) + 1
+            if self._courbes_tick % 2 == 0:
+                self._redessiner_courbes()
             # Alimente le détecteur d'anomalies (le module gère lui-même
             # l'état mode_actif et l'accumulation cycle par cycle)
             self.anomaly.enregistrer_echantillon(angles)
@@ -4755,7 +4864,7 @@ class IHMRobot:
                 niveau = "erreur" if RE_ERREUR.search(ligne) else "info"
                 horod = "[%s]" % datetime.now().strftime("%H:%M:%S")
                 texte = "%s   %s %s" % (horod, prefixe, ligne)
-                self.root.after(0, self._append_journal, texte, niveau)
+                self._journal_queue.append((texte, niveau))
                 # Détection de cycle terminé → incrémente le compteur
                 if RE_CYCLE.search(ligne):
                     self.root.after(0, self._incrementer_cycle)
