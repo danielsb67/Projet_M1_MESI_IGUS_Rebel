@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=IHM VLA — SmolVLA
+GenericName=Pipeline VLA Igus Rebel
+Comment=Enregistrement démos, entraînement SmolVLA, déploiement — sans terminal
+Exec=__IHM_DIR__/start_ihm_vla.sh
+Icon=__IHM_DIR__/icon.svg
+Terminal=false
+Categories=Utility;
+StartupNotify=true

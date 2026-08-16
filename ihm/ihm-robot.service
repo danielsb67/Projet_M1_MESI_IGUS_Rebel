@@ -1,0 +1,21 @@
+# Service systemd UTILISATEUR (systemctl --user) — modèle.
+# Les marqueurs __IHM_DIR__ sont remplacés par install_kiosk.sh.
+# Ne pas installer ce fichier tel quel : utiliser ./install_kiosk.sh.
+
+[Unit]
+Description=IHM tactile du robot Igus Rebel (mode kiosque)
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=__IHM_DIR__/start_ihm.sh
+# Affichage X11. Sur Wayland (Raspberry Pi OS Bookworm) il peut falloir
+# remplacer ou compléter par : Environment=WAYLAND_DISPLAY=wayland-0
+# (et éventuellement Environment=XDG_RUNTIME_DIR=/run/user/%U)
+Environment=DISPLAY=:0
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

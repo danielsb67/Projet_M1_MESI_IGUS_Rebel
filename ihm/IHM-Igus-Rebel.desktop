@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=IHM Igus Rebel
+GenericName=Pilotage du robot
+Comment=Pilotage tactile du robot Igus Rebel — sans terminal
+Exec=__IHM_DIR__/start_ihm.sh
+Icon=__IHM_DIR__/icon.svg
+Terminal=false
+Categories=Utility;
+StartupNotify=true
