@@ -1,0 +1,50 @@
+# =============================================================================
+# config/record.yaml — Paramètres d'enregistrement des démonstrations (§5, §6)
+# Utilisé par : sim_data_recorder
+# =============================================================================
+
+# Nombre d'épisodes à enregistrer (filtre succès appliqué → N_réussis ≤ n_episodes)
+# 50 épisodes de base avec randomisation complète du workspace (x∈[0.25,0.55], y∈[-0.28,0.28]).
+# Augmenter à 200+ pour un fine-tuning de qualité sur GPU.
+n_episodes: 50
+
+# Fréquence d'enregistrement (images, states, actions) — Hz
+# Sous-échantillonné depuis la caméra ~26 Hz ; cohérent avec le dataset (§3.1)
+fps: 15
+
+# Instruction langage attachée à chaque épisode (tirée aléatoirement parmi les variantes)
+# Source : VLA_PLAN.md §5 — 4 paraphrases pour la robustesse langagière de SmolVLA
+instructions:
+  - "Pick up the caster wheel and place it in the bin."
+  - "Grasp the roller and drop it into the box."
+  - "Put the wheel into the container."
+  - "Take the caster and place it in the bin."
+
+# Filtrage des épisodes : ne conserver que les pick&place réussis
+# (le sim_data_recorder détecte le succès via instrumentation de l'expert)
+success_filter: true
+
+# Répertoire racine pour les données brutes (avant conversion LeRobot)
+raw_root: "datasets/raw"
+
+# --- Stratégie de couverture (§6.2 : grille × répétitions) ---
+# Mode de positionnement de l'objet
+#   static : l'expert reçoit la pose vérité-terrain (pas besoin de YOLO)
+#   random : position tirée uniformément dans [x_min,x_max] × [y_min,y_max]
+mode: "static"
+
+# Grille de positions (liste explicite en mètres, repère base robot)
+# Combiné avec `repetitions` → total épisodes = len(grid) × repetitions
+# Exemple : grille 3×3 × 10 répétitions = 90 épisodes avant filtre succès
+grid:
+  x: [0.30, 0.40, 0.50]        # positions x (m) dans [0.30, 0.50]
+  y: [-0.20, 0.00, 0.20]       # positions y (m) dans [-0.20, 0.20]
+
+# Nombre de répétitions par position de grille
+repetitions: 10
+
+# Délai (s) entre épisodes (re-spawn, stabilisation physique Gazebo)
+episode_reset_delay: 2.0
+
+# Timeout par épisode (s) — abandon si l'expert ne termine pas
+episode_timeout: 30.0

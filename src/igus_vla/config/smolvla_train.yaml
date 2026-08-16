@@ -1,0 +1,34 @@
+# =============================================================================
+# smolvla_train.yaml — hyperparamètres pour l'ENTRAÎNEMENT RÉEL sur GPU.
+# =============================================================================
+# ⚠️ NE PAS confondre avec config/smolvla.yaml qui reste en mode SMOKE
+# (device=cpu, steps=5) pour valider la chaîne sans GPU. Ce fichier-ci est la
+# RÉFÉRENCE des bons hyperparams ; les notebooks Colab/Kaggle (voir TRAIN_CLOUD.md)
+# passent ces valeurs directement en flags à `lerobot-train`.
+#
+# Pour entraîner en LOCAL si un jour tu as un GPU NVIDIA :
+#   cp config/smolvla_train.yaml config/smolvla.yaml   # (sauvegarde l'ancien avant)
+#   bash src/igus_vla/scripts/train_smolvla.sh
+# =============================================================================
+
+policy_type: "smolvla"
+load_vlm_weights: true
+policy_path: "lerobot/smolvla_base"   # backbone SmolVLM2 pré-entraîné (~450M, figé)
+
+# --- Compute ---
+device: "cuda"        # GPU OBLIGATOIRE (T4/P100/A100). cpu = impraticable (jours).
+amp: true             # mixed precision → ~2x plus rapide + moins de VRAM
+batch_size: 16        # T4 16 Go : 16 OK avec amp ; baisser à 8 si OOM ; 32-64 sur A100
+steps: 20000          # ~2-4 h sur T4 ; monter à 40000 si quota/temps le permettent
+save_freq: 2000       # checkpoint tous les 2000 steps (reprise si déconnexion)
+num_workers: 2        # Colab/Kaggle ont peu de CPU → 2 (sinon goulot dataloader)
+wandb_enable: false   # mettre true + WANDB_API_KEY pour suivre les courbes
+
+# --- Architecture (fixe — héritée de smolvla_base) ---
+chunk_size: 50
+n_action_steps: 50
+
+# --- Sorties / déploiement ---
+output_dir: "outputs/train/igus_vla_smolvla"
+control_hz: 15        # = dataset fps (doit matcher au déploiement)
+gripper_threshold: 0.5

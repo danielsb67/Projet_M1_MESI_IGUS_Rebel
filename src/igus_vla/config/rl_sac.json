@@ -1,0 +1,120 @@
+{
+    "dataset": {
+        "repo_id": "dbal67/igus_rebel_pick_place_v2_2_rl_demos",
+        "root": "datasets/lerobot_v2_2_rl_demos",
+        "use_imagenet_stats": false
+    },
+
+    "env": {
+        "type": "gym_manipulator",
+        "name": "igus_gazebo",
+        "task": "IgusPickPlaceRL-v0",
+        "fps": 15,
+        "features": {
+            "action": {"type": "ACTION", "shape": [7]},
+            "agent_pos": {"type": "STATE", "shape": [7]},
+            "pixels/front": {"type": "VISUAL", "shape": [128, 128, 3]},
+            "pixels/wrist": {"type": "VISUAL", "shape": [128, 128, 3]}
+        },
+        "features_map": {
+            "action": "action",
+            "agent_pos": "observation.state",
+            "pixels/front": "observation.images.front",
+            "pixels/wrist": "observation.images.wrist"
+        },
+        "processor": {
+            "control_mode": "none",
+            "gripper": {
+                "use_gripper": true,
+                "gripper_penalty": 0.0
+            },
+            "reset": {
+                "reset_time_s": 8.0,
+                "control_time_s": 20.0,
+                "terminate_on_success": true
+            }
+        }
+    },
+
+    "policy": {
+        "type": "sac",
+        "device": "cuda",
+        "storage_device": "cpu",
+        "push_to_hub": false,
+
+        "input_features": {
+            "observation.images.front": {"type": "VISUAL", "shape": [3, 128, 128]},
+            "observation.images.wrist": {"type": "VISUAL", "shape": [3, 128, 128]},
+            "observation.state": {"type": "STATE", "shape": [7]}
+        },
+        "output_features": {
+            "action": {"type": "ACTION", "shape": [7]}
+        },
+        "dataset_stats": null,
+
+        "vision_encoder_name": "helper2424/resnet10",
+        "freeze_vision_encoder": true,
+        "shared_encoder": true,
+        "num_discrete_actions": null,
+        "image_embedding_pooling_dim": 8,
+
+        "online_steps": 100000,
+        "online_buffer_capacity": 10000,
+        "offline_buffer_capacity": 10000,
+        "online_step_before_learning": 100,
+        "policy_update_freq": 1,
+        "utd_ratio": 2,
+        "async_prefetch": false,
+
+        "discount": 0.99,
+        "temperature_init": 0.01,
+        "num_critics": 2,
+        "critic_lr": 0.0003,
+        "actor_lr": 0.0003,
+        "temperature_lr": 0.0003,
+        "critic_target_update_weight": 0.005,
+        "grad_clip_norm": 40.0,
+
+        "critic_network_kwargs": {
+            "hidden_dims": [256, 256],
+            "activate_final": true
+        },
+        "actor_network_kwargs": {
+            "hidden_dims": [256, 256],
+            "activate_final": true
+        },
+        "policy_kwargs": {
+            "use_tanh_squash": true,
+            "std_min": 1e-05,
+            "std_max": 10.0,
+            "init_final": 0.05
+        },
+
+        "actor_learner_config": {
+            "learner_host": "127.0.0.1",
+            "learner_port": 50051,
+            "policy_parameters_push_frequency": 4,
+            "queue_get_timeout": 2
+        },
+        "concurrency": {
+            "actor": "threads",
+            "learner": "threads"
+        },
+        "use_torch_compile": false
+    },
+
+    "output_dir": "outputs/rl/sac_pilote",
+    "job_name": "igus_sac_pilote",
+    "resume": false,
+    "seed": 42,
+    "num_workers": 4,
+    "batch_size": 128,
+    "log_freq": 100,
+    "save_checkpoint": true,
+    "save_freq": 10000,
+
+    "wandb": {
+        "enable": true,
+        "mode": "offline"
+    }
+}

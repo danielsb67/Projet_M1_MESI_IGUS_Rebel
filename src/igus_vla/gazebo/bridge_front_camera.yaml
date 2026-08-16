@@ -1,0 +1,50 @@
+---
+# bridge_front_camera.yaml — pont ros_gz pour la caméra fixe externe + horloge sim.
+#
+# Topics Gazebo réels (vérifiés au lancement de world_with_camera.sdf,
+# avec <topic>front_camera/image</topic> dans le capteur) :
+#   /front_camera/image        (ignition.msgs.Image)
+#   /front_camera/camera_info  (ignition.msgs.CameraInfo)
+#   /clock                     (ignition.msgs.Clock)
+#
+# Côté ROS, on garde la clé logique « front » (cf. VLA_PLAN.md §2.1) :
+#   /front_camera/image  ->  observation.images.front (recorder)
+#
+# Utilisé par : launch/record_demos.launch.py (PHASE 3).
+
+- ros_topic_name: "/clock"
+  gz_topic_name: "/clock"
+  ros_type_name: "rosgraph_msgs/msg/Clock"
+  gz_type_name: "ignition.msgs.Clock"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/front_camera/image"
+  gz_topic_name: "/front_camera/image"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "ignition.msgs.Image"
+  direction: GZ_TO_ROS
+
+- ros_topic_name: "/front_camera/camera_info"
+  gz_topic_name: "/front_camera/camera_info"
+  ros_type_name: "sensor_msgs/msg/CameraInfo"
+  gz_type_name: "ignition.msgs.CameraInfo"
+  direction: GZ_TO_ROS
+
+# Caméra POIGNET (eye-in-hand) v2 — capteur sur la pince Schunk (schunk_egp25.urdf.xacro).
+# ⚠️ gz_topic_name À VÉRIFIER : un capteur sur le robot spawné peut être préfixé par le
+#    scope du modèle (ex. /model/igus_rebel/.../wrist_camera/image). Vérifier avec `gz topic -l`.
+- ros_topic_name: "/wrist_camera/image"
+  gz_topic_name: "/wrist_camera/image"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "ignition.msgs.Image"
+  direction: GZ_TO_ROS
+
+# Caméra poignet ZOOMÉE (wrist_zoom_camera, FOV 0.80 rad) — même link/pose que la
+# wrist, déclarée dans schunk_egp25.urdf.xacro. Sert au comparatif « zoom vs
+# non-zoom » sur les MÊMES trajectoires (run 1000 ép.). Pas de camera_info :
+# même convention que la wrist (seule la front en a une).
+- ros_topic_name: "/wrist_zoom_camera/image"
+  gz_topic_name: "/wrist_zoom_camera/image"
+  ros_type_name: "sensor_msgs/msg/Image"
+  gz_type_name: "ignition.msgs.Image"
+  direction: GZ_TO_ROS

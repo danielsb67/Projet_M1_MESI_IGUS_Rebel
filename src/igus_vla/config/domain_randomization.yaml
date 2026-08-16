@@ -1,0 +1,65 @@
+# =============================================================================
+# config/domain_randomization.yaml — Domain randomization par épisode (§6.2)
+# Appliqué par record_orchestrator au (re)placement de chaque épisode.
+#
+# Workspace atteignable Igus Rebel 6DOF (portée ~600 mm) avec la pince Schunk :
+#   X : 0.22–0.58 m (devant le robot ; négatif = dans le dos, exclu)
+#   Y : -0.30–0.30 m (gauche–droite)
+# Zones exclues : trop près de la base (X < 0.22, singularité) ou du bac place.
+# =============================================================================
+
+# --- Pose de l'objet (roulette) ---
+# Repère base robot, unités : mètres.
+# La zone correspond au plan de travail Z=0 (le sol de la sim).
+# record_orchestrator tire (x, y) uniformément dans ces plages par épisode,
+# en évitant automatiquement le bac (cercle de rayon success_radius * 1.5 autour
+# du place_x/place_y).
+object_pose:
+  x:
+    min: 0.25   # ~25 cm devant la base (pince peut descendre)
+    max: 0.55   # ~55 cm — limite portée + marge sécurité
+  y:
+    min: -0.28  # 28 cm à gauche  (évite les butées articulaires)
+    max:  0.28  # 28 cm à droite
+
+# --- Propriétés de l'objet ---
+object:
+  size_variation: false
+  size_factor:
+    min: 0.90
+    max: 1.10
+  color_variation: false
+  color_palette:
+    - [0.8, 0.2, 0.2, 1.0]   # rouge
+    - [0.2, 0.6, 0.8, 1.0]   # bleu clair
+    - [0.9, 0.7, 0.1, 1.0]   # jaune
+    - [0.3, 0.8, 0.3, 1.0]   # vert
+    - [0.6, 0.6, 0.6, 1.0]   # gris (défaut)
+
+# --- Distracteurs ---
+distractors:
+  enabled: false   # désactivé pour la collecte initiale de 50 épisodes
+  min_count: 0
+  max_count: 2
+  x: [0.25, 0.55]
+  y: [-0.25, 0.25]
+
+# --- Éclairage ---
+lighting:
+  enabled: false   # désactivé pour la collecte initiale (stabilité)
+  intensity_variation: 0.30
+  sun_azimuth_range: [-45, 45]
+
+# --- Caméra ---
+camera:
+  jitter: false
+  position_jitter_m: 0.02
+  angle_jitter_deg:  2.0
+
+# --- Bac (zone de dépôt) ---
+bin:
+  randomize: false   # position fixe : place_x=0.0, place_y=0.25 (paramètre de lancement)
+
+# --- Table / surface de travail ---
+table:
+  texture_variation: false

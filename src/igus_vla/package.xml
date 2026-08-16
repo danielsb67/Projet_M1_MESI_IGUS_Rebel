@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>igus_vla</name>
+  <version>0.1.0</version>
+  <description>Pipeline VLA (SmolVLA) pour igus ReBeL — enregistrement, conversion,
+  entraînement et déploiement d'une politique apprise sur démonstrations Gazebo.</description>
+  <maintainer email="law.law.dit.dit@gmail.com">dbal</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <!-- Dépendances ROS runtime et build -->
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
+  <depend>trajectory_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>cv_bridge</depend>
+  <depend>ros_gz_sim</depend>
+  <depend>ros_gz_bridge</depend>
+  <depend>ros_gz_image</depend>
+
+  <!-- Dépendances exec-only (paquets du workspace) -->
+  <exec_depend>mon_controleur</exec_depend>
+  <exec_depend>igus_rebel_moveit_config</exec_depend>
+  <exec_depend>igus_rebel_gazebo_ignition</exec_depend>
+  <exec_depend>igus_rebel_description_ros2</exec_depend>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

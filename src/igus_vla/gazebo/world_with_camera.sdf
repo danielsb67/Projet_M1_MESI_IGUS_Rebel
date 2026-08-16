@@ -1,0 +1,266 @@
+<?xml version="1.0"?>
+<!--
+  world_with_camera.sdf — Monde de génération de démonstrations VLA.
+
+  = default.sdf (sol + soleil + physique)
+    + caméra fixe externe (eye-to-hand, type D435) surplombant l'espace de travail
+    + objet roulette inline (référence visuelle ; cf. object_roulette.sdf)
+
+  Le robot N'est PAS dans ce fichier : il est spawné par-dessus via
+  `ros_gz_sim create -topic /robot_description` (comme dans ignition.launch.py).
+  Pour la cohérence repère monde ≈ repère base, le robot sera spawné en (0,0,0) yaw=0
+  par le launch d'enregistrement (PHASE 3), donc :
+    - espace de travail attendu : x∈[0.30,0.50], y∈[-0.20,0.20] (cf. VLA_PLAN.md §6.2)
+    - la roulette par défaut est en (0.4, 0.15) = PICK de l'expert (pick_place_ia.py).
+
+  Plugins explicites : un monde chargé directement n'a pas la garantie du jeu de
+  plugins par défaut ; on déclare Physics + SceneBroadcaster + UserCommands + Sensors
+  (Sensors avec ogre2 est OBLIGATOIRE pour le rendu caméra).
+-->
+<sdf version="1.6">
+  <world name="default">
+
+    <physics name="1ms" type="ignored">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+    </physics>
+
+    <!-- Gravité NULLE : monde dédié à la génération de démos VLA par grasp CINÉMATIQUE.
+         L'objet ne tombe pas (reste où le gripper_shim le place via set_pose) ; le bras
+         est asservi en position (base ancrée) → fonctionne sans gravité et ne "droope" plus
+         au repos. Choix assumé pour des démos propres (cf. VLA_PROGRESS.md, Étape 3). -->
+    <gravity>0 0 0</gravity>
+
+    <plugin filename="ignition-gazebo-physics-system"
+            name="ignition::gazebo::systems::Physics"/>
+    <plugin filename="ignition-gazebo-user-commands-system"
+            name="ignition::gazebo::systems::UserCommands"/>
+    <plugin filename="ignition-gazebo-scene-broadcaster-system"
+            name="ignition::gazebo::systems::SceneBroadcaster"/>
+    <plugin filename="ignition-gazebo-sensors-system"
+            name="ignition::gazebo::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+
+    <light type="directional" name="sun">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <attenuation>
+        <range>1000</range>
+        <constant>0.9</constant>
+        <linear>0.01</linear>
+        <quadratic>0.001</quadratic>
+      </attenuation>
+      <direction>-0.5 0.1 -0.9</direction>
+    </light>
+
+    <model name="ground_plane">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <plane>
+              <normal>0 0 1</normal>
+              <size>100 100</size>
+            </plane>
+          </geometry>
+          <material>
+            <ambient>0.8 0.8 0.8 1</ambient>
+            <diffuse>0.8 0.8 0.8 1</diffuse>
+            <specular>0.8 0.8 0.8 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ===================== Caméra fixe externe (eye-to-hand) ===================== -->
+    <!-- Position : devant le bras (+x), surélevée, regardant vers la base et l'espace
+         de travail. À ajuster visuellement (c'est le but de l'étape 1). -->
+    <model name="front_camera_stand">
+      <static>true</static>
+      <!-- Vue frontale surélevée, CENTRÉE sur le plan de travail (pas sur le robot) :
+           caméra reculée/haute regardant ~(0.35,0,0) ; le robot entre par le haut du
+           cadre, le bras descend dans la zone basse-centrale pour saisir.
+           Cohérent eye-to-hand D435. À affiner contre une vraie pose de pick (expert). -->
+      <!-- v2 (recadrage 2026-06-26) : rapprochée (1.3→1.0), un peu plus plongeante
+           (0.730→0.80) + léger zoom (FOV 1.20→1.00) pour que le plan de travail + le bac
+           REMPLISSENT l'image (objet ~2× plus gros). 1er jet à affiner à l'œil. -->
+      <pose>0.9 0.45 0.70 0 0.53 3.66519</pose>
+      <!--<pose>1.0 0.0 0.80 0 0.6 3.14159</pose> ancien placement camera, en face -->
+      <link name="camera_link">
+        <!-- Pas de visuel cosmétique : il projetterait une ombre dans le champ.
+             La caméra reste repérable dans le GUI via son frustum (visualize=true). -->
+        <sensor name="front_camera" type="camera">
+          <camera>
+            <horizontal_fov>1.00</horizontal_fov>
+            <image>
+              <width>640</width>
+              <height>480</height>
+              <format>R8G8B8</format>
+            </image>
+            <clip>
+              <near>0.05</near>
+              <far>10.0</far>
+            </clip>
+          </camera>
+          <always_on>1</always_on>
+          <update_rate>30</update_rate>
+          <visualize>true</visualize>
+          <topic>front_camera/image</topic>
+        </sensor>
+      </link>
+    </model>
+
+    <!-- ===================== Objet à saisir : roulette (inline) ===================== -->
+    <!-- Géométrie identique à object_roulette.sdf (⌀54×32 mm = roulette RÉELLE).
+         On garde le vrai diamètre 54 mm ; c'est la PINCE qui a été remise à l'échelle
+         réelle (mesh ×1.269 → 184 mm, écart de mors ~73 mm) pour que les mors se
+         referment sans pénétrer les flancs. cf. schunk_egp25.urdf.xacro.
+         En PHASE 3, le recorder supprimera/re-spawnera cet objet (domain randomization). -->
+    <model name="roulette">
+      <pose>0.4 0.15 0.016 0 0 0</pose>
+      <!-- Objet piloté en CINÉMATIQUE par le gripper_shim (set_pose). Dynamique (sinon
+           set_pose ne le déplace pas) MAIS gravité OFF (sinon il tombe entre 2 updates).
+           → reste en place au repos, suit la pince une fois saisi. -->
+      <link name="link">
+        <gravity>false</gravity>
+        <kinematic>true</kinematic>
+        <inertial>
+          <mass>0.05</mass>
+          <inertia>
+            <ixx>1.372e-5</ixx>
+            <iyy>1.372e-5</iyy>
+            <izz>1.891e-5</izz>
+            <ixy>0</ixy>
+            <ixz>0</ixz>
+            <iyz>0</iyz>
+          </inertia>
+        </inertial>
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.027</radius>
+              <length>0.032</length>
+            </cylinder>
+          </geometry>
+          <surface>
+            <friction>
+              <ode>
+                <mu>1.0</mu>
+                <mu2>1.0</mu2>
+              </ode>
+            </friction>
+          </surface>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.027</radius>
+              <length>0.032</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <ambient>0.85 0.20 0.10 1</ambient>
+            <diffuse>0.85 0.20 0.10 1</diffuse>
+            <specular>0.2 0.2 0.2 1</specular>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ===================== Bac de dépôt (place) ===================== -->
+    <!-- Conteneur ouvert où l'expert dépose la roulette : position = PLACE
+         (place_x=0.0, place_y=0.25 dans pick_place_ia.py / record_demos.launch.py).
+         STATIQUE (immobile). Parois basses (5 cm) : la pince relâche à z=0.10
+         (place_z), bien au-dessus des murs → aucune collision pendant le dépôt.
+         Cavité intérieure ~0.16×0.16 m (coin à 0.113 m < success_radius 0.12 m).
+         Pour déplacer le bac : changer ce <pose> ET place_x/place_y à l'identique. -->
+    <model name="bac">
+      <static>true</static>
+      <pose>0.0 0.25 0 0 0 0</pose>
+      <link name="link">
+        <!-- Sol du bac -->
+        <collision name="sol_collision">
+          <pose>0 0 0.005 0 0 0</pose>
+          <geometry><box><size>0.184 0.184 0.01</size></box></geometry>
+        </collision>
+        <visual name="sol_visual">
+          <pose>0 0 0.005 0 0 0</pose>
+          <geometry><box><size>0.184 0.184 0.01</size></box></geometry>
+          <material>
+            <ambient>0.20 0.35 0.55 1</ambient>
+            <diffuse>0.20 0.35 0.55 1</diffuse>
+            <specular>0.1 0.1 0.1 1</specular>
+          </material>
+        </visual>
+
+        <!-- Mur +X -->
+        <collision name="mur_xp_collision">
+          <pose>0.086 0 0.035 0 0 0</pose>
+          <geometry><box><size>0.012 0.184 0.05</size></box></geometry>
+        </collision>
+        <visual name="mur_xp_visual">
+          <pose>0.086 0 0.035 0 0 0</pose>
+          <geometry><box><size>0.012 0.184 0.05</size></box></geometry>
+          <material>
+            <ambient>0.25 0.45 0.70 1</ambient>
+            <diffuse>0.25 0.45 0.70 1</diffuse>
+          </material>
+        </visual>
+
+        <!-- Mur -X -->
+        <collision name="mur_xm_collision">
+          <pose>-0.086 0 0.035 0 0 0</pose>
+          <geometry><box><size>0.012 0.184 0.05</size></box></geometry>
+        </collision>
+        <visual name="mur_xm_visual">
+          <pose>-0.086 0 0.035 0 0 0</pose>
+          <geometry><box><size>0.012 0.184 0.05</size></box></geometry>
+          <material>
+            <ambient>0.25 0.45 0.70 1</ambient>
+            <diffuse>0.25 0.45 0.70 1</diffuse>
+          </material>
+        </visual>
+
+        <!-- Mur +Y -->
+        <collision name="mur_yp_collision">
+          <pose>0 0.086 0.035 0 0 0</pose>
+          <geometry><box><size>0.184 0.012 0.05</size></box></geometry>
+        </collision>
+        <visual name="mur_yp_visual">
+          <pose>0 0.086 0.035 0 0 0</pose>
+          <geometry><box><size>0.184 0.012 0.05</size></box></geometry>
+          <material>
+            <ambient>0.25 0.45 0.70 1</ambient>
+            <diffuse>0.25 0.45 0.70 1</diffuse>
+          </material>
+        </visual>
+
+        <!-- Mur -Y -->
+        <collision name="mur_ym_collision">
+          <pose>0 -0.086 0.035 0 0 0</pose>
+          <geometry><box><size>0.184 0.012 0.05</size></box></geometry>
+        </collision>
+        <visual name="mur_ym_visual">
+          <pose>0 -0.086 0.035 0 0 0</pose>
+          <geometry><box><size>0.184 0.012 0.05</size></box></geometry>
+          <material>
+            <ambient>0.25 0.45 0.70 1</ambient>
+            <diffuse>0.25 0.45 0.70 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+  </world>
+</sdf>

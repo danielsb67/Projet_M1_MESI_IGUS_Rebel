@@ -1,0 +1,54 @@
+# =============================================================================
+# config/dataset.yaml — Paramètres du LeRobotDataset (§4)
+# Utilisé par : to_lerobot_dataset
+# =============================================================================
+
+# Identifiant Hugging Face du dataset (format "username/dataset-name")
+# NB : l'IHM surcharge repo_id/root/raw_root selon le dataset choisi (bouton 📁).
+repo_id: "dbal67/igus_rebel_pick_place_v2"
+
+# Répertoire local racine du dataset converti (format LeRobotDataset v2.1)
+root: "datasets/lerobot"
+
+# Pousser sur le Hub Hugging Face après la conversion (nécessite HF_TOKEN dans .env)
+push_to_hub: false
+
+# Fréquence cible du dataset (Hz) — doit correspondre à config/record.yaml:fps
+fps: 15
+
+# --- Description des features (commentaire de référence — §4) ---
+# Le schéma exact est défini dans to_lerobot_dataset.py via LeRobotDataset.create()
+# et doit correspondre à VLA_PLAN.md §4 :
+#
+# features:
+#   "observation.images.front":
+#     dtype: "video"          # encodé en MP4 par LeRobot
+#     shape: [480, 640, 3]    # H×W×C (640×480 RGB, §2.1)
+#     names: ["height", "width", "channel"]
+#
+#   "observation.state":
+#     dtype: "float32"
+#     shape: [7]              # [q1,q2,q3,q4,q5,q6,gripper] en radians (§2.2)
+#     names: ["joint1","joint2","joint3","joint4","joint5","joint6","gripper"]
+#
+#   "action":
+#     dtype: "float32"
+#     shape: [7]              # [q1*,q2*,q3*,q4*,q5*,q6*,gripper_cmd] (§3)
+#     names: ["joint1","joint2","joint3","joint4","joint5","joint6","gripper"]
+#
+# Colonnes ajoutées automatiquement par LeRobot :
+#   timestamp, frame_index, episode_index, index, task_index
+# + tasks (instructions), stats de normalisation (MEAN_STD, calculées à la fin)
+
+# Normalisation state/action (MEAN_STD calculées par LeRobot sur le dataset entier)
+normalization_mode: "MEAN_STD"
+
+# Répertoire des épisodes bruts à convertir (produit par sim_data_recorder)
+# v2 : front + wrist. L'IHM surcharge via --raw-root selon le dossier choisi.
+raw_root: "datasets/raw_v2"
+
+# Ne convertir que les épisodes réussis (meta.json: success=true). --all l'ignore.
+only_success: true
+
+# Instruction par défaut si meta.json d'un épisode n'en porte pas (§5)
+task_instruction: "Pick up the caster wheel and place it in the bin."

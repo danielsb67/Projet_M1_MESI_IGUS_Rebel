@@ -1,0 +1,70 @@
+<?xml version="1.0"?>
+<!--
+  object_roulette.sdf — Roulette (caster wheel) à saisir, modèle autonome.
+
+  Cf. VLA_PLAN.md §6.1 :
+    - cylindre  ⌀54 mm (rayon 0.027 m) × hauteur 32 mm = roulette RÉELLE
+      (le vrai diamètre est conservé ; c'est la pince qui a été remise à l'échelle
+       réelle 184 mm — cf. schunk_egp25.urdf.xacro — pour que les mors se referment
+       sans pénétrer les flancs)
+    - masse ~0.05 kg, axe Z vertical, posé sur le plan de travail (base à z=0)
+    - friction élevée (saisie par friction + attache cinématique en §7.4)
+
+  Ce fichier est destiné à être spawné/randomisé dynamiquement par le
+  sim_data_recorder (PHASE 3) via `ros_gz_sim create -file ... -x .. -y .. -Y ..`.
+  La même géométrie est inline dans world_with_camera.sdf comme référence visuelle.
+-->
+<sdf version="1.6">
+  <model name="roulette">
+    <!-- pose par défaut : dans l'espace de travail du bras (repère monde ≈ base) -->
+    <pose>0.4 0.15 0.016 0 0 0</pose>
+    <!-- piloté en cinématique par le gripper_shim via set_pose (cf. VLA_PROGRESS).
+         Dynamique (sinon set_pose ne le déplace pas) + gravité OFF (sinon il tombe). -->
+    <link name="link">
+      <gravity>false</gravity>
+      <kinematic>true</kinematic>
+      <inertial>
+        <mass>0.05</mass>
+        <!-- inertie laissée approx. r≈0.027 (négligeable : objet kinematic + gravité OFF,
+             piloté par set_pose → l'inertie n'intervient pas dans la sim). -->
+        <inertia>
+          <ixx>1.372e-5</ixx>
+          <iyy>1.372e-5</iyy>
+          <izz>1.891e-5</izz>
+          <ixy>0</ixy>
+          <ixz>0</ixz>
+          <iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <collision name="collision">
+        <geometry>
+          <cylinder>
+            <radius>0.027</radius>
+            <length>0.032</length>
+          </cylinder>
+        </geometry>
+        <surface>
+          <friction>
+            <ode>
+              <mu>1.0</mu>
+              <mu2>1.0</mu2>
+            </ode>
+          </friction>
+        </surface>
+      </collision>
+      <visual name="visual">
+        <geometry>
+          <cylinder>
+            <radius>0.027</radius>
+            <length>0.032</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.85 0.20 0.10 1</ambient>
+          <diffuse>0.85 0.20 0.10 1</diffuse>
+          <specular>0.2 0.2 0.2 1</specular>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>

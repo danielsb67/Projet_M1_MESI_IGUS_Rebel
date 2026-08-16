@@ -1,0 +1,90 @@
+# =============================================================================
+# config/backends.yaml — Sélection du backend et mapping topics (§2.1, §3, §7.1)
+# Utilisé par : vla_policy_node, sim_data_recorder, backends/gazebo.py, backends/cri.py
+# =============================================================================
+
+# Backend actif : "gazebo" (simulation Ignition) ou "cri" (robot réel via TCP CRI)
+backend: "gazebo"
+
+# =============================================================================
+# Topics et paramètres — backend Gazebo (simulation)
+# =============================================================================
+sim:
+  # --- Observation ---
+  # Image caméra fixe externe (§2.1) → clé logique "front"
+  image_topic: "/front_camera/image"
+
+  # États articulaires (6 DOF, radians) — QoS BEST_EFFORT (§2.2)
+  joint_states_topic: "/joint_states"
+
+  # --- Action ---
+  # Trajectoire bras (JointTrajectory) envoyée au contrôleur ros2_control (§3)
+  arm_trajectory_topic: "/rebel_arm_controller/joint_trajectory"
+
+  # Service pince (SetBool) géré par le shim sim (gripper_shim.py)
+  gripper_topic: "/gripper/command"
+
+  # Noms des joints (ordre correspondant à observation.state et action)
+  joint_names:
+    - "joint1"
+    - "joint2"
+    - "joint3"
+    - "joint4"
+    - "joint5"
+    - "joint6"
+
+  # Durée (s, temps SIM côté contrôleur) de CHAQUE consigne articulaire envoyée
+  # par vla_policy_node en mode d'exécution "stream" (un point par tick).
+  # ⚠ Sémantique du dataset : action[t] = state[t+1] à 15 fps → la cible doit être
+  # atteinte en EXACTEMENT 1 tick, soit 1/control_hz = 0.0667 s.
+  # Historique : 0.8 → retard de poursuite ≈ durée × vitesse, la pince se fermait
+  # ~11 cm au-dessus de l'objet (> tolérance d'attache du gripper_shim). Puis 0.05,
+  # qui n'était PAS la valeur juste mais un pansement : le nœud cadençait en temps
+  # MUR pendant que le contrôleur exécutait en temps SIM (RTF ~0.5 en charge), et
+  # raccourcir la consigne rattrapait le retard en commandant ~1,33× trop vite —
+  # au prix d'une vitesse articulaire sans rapport avec les démonstrations.
+  # Le nœud partageant maintenant l'horloge de la sim (use_sim_time:=true), la
+  # valeur correcte est 1/control_hz. En mode "chunk" (défaut) ce champ n'est plus
+  # utilisé : l'échéancier vient de time_from_start = (i+1)/control_hz.
+  action_duration: 0.0667
+
+  # QoS fiabilité pour joint_states (BEST_EFFORT requis en Gazebo)
+  joint_states_qos: "best_effort"
+
+# =============================================================================
+# Topics et paramètres — backend CRI (robot réel igus ReBeL)
+# =============================================================================
+real:
+  # --- Observation ---
+  # Caméra Intel RealSense D435 (§2.1)
+  image_topic: "/camera/camera/color/image_raw"
+
+  # États articulaires (même QoS que sim)
+  joint_states_topic: "/joint_states"
+
+  # --- Action ---
+  # Action follow_joint_trajectory (robot réel via igus_rebel_hw_controller)
+  arm_trajectory_topic: "/rebel_arm_controller/joint_trajectory"
+
+  # Service pince fourni par igus_rebel_hw_controller (sortie numérique SCHUNK EGP25)
+  gripper_topic: "/gripper/command"
+
+  # Noms des joints (identiques sim/réel)
+  joint_names:
+    - "joint1"
+    - "joint2"
+    - "joint3"
+    - "joint4"
+    - "joint5"
+    - "joint6"
+
+  # QoS fiabilité pour joint_states
+  joint_states_qos: "best_effort"
+
+  # --- Connexion CRI (lue aussi depuis .env : ROBOT_IP, ROBOT_PORT) ---
+  # Ces valeurs sont des fallbacks si .env n'est pas chargé
+  robot_ip: "192.168.3.11"
+  robot_port: 3920
+
+  # Fréquence heartbeat ALIVEJOG (Hz) — requis par le protocole CRI
+  heartbeat_hz: 10
