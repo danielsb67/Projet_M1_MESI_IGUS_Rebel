@@ -6,6 +6,28 @@
 
 ---
 
+## 🟢 2026-08-16 (15 h) — VERDICT v2.4 : 38/50 (76 %) vs v2.2 31/50 (62 %), dos à dos
+
+Chaîne de nuit terminée sans incident (collecte 8 h 12, train 4 h 13 GPU 99 %,
+double éval 50 positions). **+14 points sur les mêmes 50 positions jouées le même
+jour** ; apparié : 12 gains / 5 pertes (binomial unilatéral p = 0,072) — probable,
+à confirmer. Le pari « masse uniforme > ciblage » est conforté.
+
+- **Gain en périphérie r ≥ 0,45 : 10/20 → 14/20** (la tranche des échecs systématiques) ;
+  **rattrapages 1 → 8** (le retry démontré transfère) ; séjour <10 cm +3,7 pts (p=0,008) ;
+  fermeture en anticipation (p<0,001). **Visée fine inchangée** (dxy min 0,90 cm, sous DMD).
+- **12/12 échecs v2.4 = timeout 45 s en plein rattrapage** (≥2 fermetures) → l'éval
+  complémentaire à 60-70 s devient LA mesure prioritaire (points gratuits probables).
+- **Piège découvert** : le tirage seed 42 n = 50 ne reproduit PAS les 20 premiers du
+  tirage n = 20 (aucune position historique dans les 50, plus proche à 1,4 cm).
+  Comparaison 50↔50 valide ; grille seedB par idx non transposable ; inclure le fichier
+  des 20 historiques dans toute future éval.
+- **v2_4 = champion en titre** (`outputs/train/v2_4_smolvla`). Rapport visuel :
+  https://claude.ai/code/artifact/d19003af-c7e6-4560-b49b-34bb7d2a276b
+- Analyses : `outputs/nuit_calib_v2_4/20260815_202923/compare_*.txt`
+
+---
+
 ## 🔵 2026-08-16 (nuit) — Calibration seedB : 13/20 = 13/20, la grille de lecture est posée
 
 **Étape A terminée** (retrain v2_2 identique, graine 2026, 27 000 steps, 3h10 GPU →
