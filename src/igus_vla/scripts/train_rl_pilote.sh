@@ -46,6 +46,31 @@ etape_ko() { log "❌ $*"; }
 abandon()  { etape_ko "$* — ABANDON."; exit 1; }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# MODE DE RÉCOMPENSE (IGUS_RL_REWARD_MODE, défaut sparse = run n°1 à l'identique).
+# L'appariement online↔offline exigé par gazebo_env est CÂBLÉ ici : en dense,
+# le dataset démos devient la version REJOUÉE EN DENSE et les overrides draccus
+# assortis sont passés au learner ET à l'actor (rl_sac.json reste sparse — le
+# run sparse demeure reproductible sans toucher à la config). SEUIL_SUCCES :
+# un épisode est un succès ssi « Episode reward » ≥ seuil — en dense le shaping
+# seul (≤ k_progres·0,8 + r_saisie − r_temps·n ≈ 3,6 max) n'atteint jamais 5,
+# r_depose=10 si ; en sparse la récompense vaut exactement 0.0 ou 1.0.
+# ─────────────────────────────────────────────────────────────────────────────
+REWARD_MODE="${IGUS_RL_REWARD_MODE:-sparse}"
+case "$REWARD_MODE" in
+  sparse)
+    OVERRIDES_DATASET=()
+    SEUIL_SUCCES="0.5" ;;
+  dense)
+    DS_RL="${DS_RL}_dense"
+    OVERRIDES_DATASET=(
+      "--dataset.root=$DS_RL"
+      "--dataset.repo_id=dbal67/igus_rebel_pick_place_v2_2_rl_demos_dense" )
+    SEUIL_SUCCES="5" ;;
+  *) abandon "IGUS_RL_REWARD_MODE='$REWARD_MODE' invalide (attendu sparse ou dense)" ;;
+esac
+export IGUS_RL_REWARD_MODE="$REWARD_MODE"   # lu par gazebo_env dans l'actor
+
+# ─────────────────────────────────────────────────────────────────────────────
 # GARDE-FOU N°1 — refuser si un train / une collecte / un autre run RL tourne.
 # Méthode : lecture DIRECTE de /proc/<pid>/cmdline (argv réel des AUTRES
 # processus). Aucun pgrep : un motif qui matche sa propre ligne de commande a
@@ -85,6 +110,7 @@ verifier_machine_libre() {
 }
 
 log "══════ PILOTE RL — garde-fous et préconditions ══════"
+log "mode récompense : $REWARD_MODE (démos : $DS_RL, seuil succès : ≥ $SEUIL_SUCCES)"
 verifier_machine_libre
 
 # ── Préconditions (échouer MAINTENANT, pas au milieu du pilote) ──────────────
@@ -107,7 +133,7 @@ python3 -c "import json; json.load(open('$CONFIG'))" 2>>"$JOURNAL" || abandon "c
 # ReplayBuffer._lerobotdataset_to_transitions lève KeyError (buffer.py:675).
 # Produit par igus_vla/rl/demos_to_rl_dataset.py (RL_PLAN.md §4).
 [ -f "$DS_RL/meta/info.json" ] || \
-  abandon "dataset démos RL absent : $DS_RL — lancer d'abord demos_to_rl_dataset.py (RL_PLAN.md §4)"
+  abandon "dataset démos RL absent : $DS_RL — lancer d'abord demos_to_rl_dataset.py --reward-mode $REWARD_MODE (RL_PLAN.md §4)"
 python3 - "$DS_RL/meta/info.json" <<'EOF' 2>>"$JOURNAL" || abandon "dataset démos RL sans 'next.reward' (conversion incomplète)"
 import json, sys
 feats = json.load(open(sys.argv[1]))["features"]
@@ -191,8 +217,15 @@ demarrer_sim() {
   ros2 launch igus_vla check_robot_in_world.launch.py headless:=true \
       >>"$RUN_DIR/sim.log" 2>&1 &
   SIM_PID=$!
+  # pose_pub_hz : 5 Hz (défaut shim) en sparse — inchangé run n°1 ; 15 Hz en
+  # dense pour que la distance pince↔objet du shaping online soit fraîche à la
+  # cadence de contrôle, comme dans le rejeu offline des démos (qui n'a aucun
+  # retard de pose — cf. en-tête « RÉCOMPENSE » de demos_to_rl_dataset.py).
+  local shim_pose_hz=5.0
+  [ "$REWARD_MODE" = "dense" ] && shim_pose_hz=15.0
   ros2 run igus_vla gripper_shim --ros-args \
       -p use_sim_time:=true -p world_name:=default -p object_model:=roulette \
+      -p pose_pub_hz:="$shim_pose_hz" \
       >>"$RUN_DIR/shim.log" 2>&1 &
   SHIM_PID=$!
 
@@ -228,6 +261,7 @@ demarrer_actor() {
   PYTHONPATH="$WS/src/igus_vla:${PYTHONPATH:-}" \
     "$VENV_PY" -m igus_vla.rl.actor_igus \
       --config_path="$CONFIG" \
+      "${OVERRIDES_DATASET[@]}" \
       --output_dir="$RUN_DIR/actor_$(date +%H%M%S)" \
       >>"$RUN_DIR/actor.log" 2>&1 &
   ACTOR_PID=$!
@@ -242,6 +276,7 @@ demarrer_actor() {
 log "══════ Étape 1/4 : learner ══════"
 "$VENV_PY" -m lerobot.rl.learner \
     --config_path="$CONFIG" \
+    "${OVERRIDES_DATASET[@]}" \
     --output_dir="$RUN_DIR/learner" \
     >>"$RUN_DIR/learner.log" 2>&1 &
 LEARNER_PID=$!
@@ -306,15 +341,18 @@ arret_general
 # fichier logs/*.log) — additionner les deux jeux de fichiers doublait épisodes,
 # succès et NaN, et le verdict GO/NO-GO se rendait sur des chiffres faux.
 NB_EPISODES=$(grep -c "Episode reward" "$RUN_DIR/actor.log" 2>/dev/null)
+# Succès = seuil NUMÉRIQUE sur la valeur (dernier champ de la ligne actor.py:352
+# « … Episode reward: <valeur> ») — un simple « ≠ 0.0 » compterait ~100 % de
+# succès en dense (quasi tout épisode a une récompense non nulle).
 NB_SUCCES=$(grep "Episode reward" "$RUN_DIR/actor.log" 2>/dev/null | \
-            grep -vc "reward: 0.0" || true)
+            awk -v seuil="$SEUIL_SUCCES" '$NF + 0 >= seuil' | wc -l)
 DERNIER_OPT=$(grep "Number of optimization step" "$RUN_DIR/learner.log" 2>/dev/null | \
               tail -1)
 NB_NAN=$(grep -c "NaN detected" "$RUN_DIR/learner.log" 2>/dev/null)
 DERNIER_CKPT=$(readlink -f "$RUN_DIR/learner/checkpoints/last" 2>/dev/null || echo "aucun")
 
 log "── BILAN PILOTE ──"
-log "épisodes actor        : ${NB_EPISODES:-0} (dont reward>0 : ${NB_SUCCES:-0})"
+log "épisodes actor        : ${NB_EPISODES:-0} (dont succès reward ≥ $SEUIL_SUCCES : ${NB_SUCCES:-0})"
 log "learner               : ${DERNIER_OPT:-aucune optimisation journalisée}"
 log "NaN filtrés           : ${NB_NAN:-0}"
 log "relances sim          : $relances"

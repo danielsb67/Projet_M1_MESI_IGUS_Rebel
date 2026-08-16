@@ -66,6 +66,11 @@ transposé au RL).
 2. attend `len(replay_buffer) >= online_step_before_learning` (l.380) ;
 3. par pas d'optimisation : `utd_ratio` mises à jour critic (l.394-451 + 453-493),
    puis actor + température à `policy_update_freq` (l.517-546), soft update des cibles ;
+   ⚠ l'optimiseur de température est construit avec `lr=cfg.policy.critic_lr`
+   (learner.py:801) : `temperature_lr` n'est PAS consommé par CE learner (il ne sert
+   que `get_optimizer_preset` du chemin lerobot-train classique, configuration_sac.py:210)
+   — retiré de rl_sac.json pour ne pas laisser croire qu'il agit ; régler la LR de
+   température ici passe par `critic_lr` ;
 4. checkpoint tous les `save_freq` pas **et** au dernier pas (l.589) — ⚠ voir §8.5 ;
 5. push des poids actor → queue → gRPC (l.548-551).
 

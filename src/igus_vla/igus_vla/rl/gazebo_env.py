@@ -24,11 +24,46 @@ L'enveloppe fait UNIQUEMENT le pont vers ce contrat (§3.2/§3.3) :
 * action (7,) ∈ [-1,1] (sortie tanh du SAC) → cible articulaire ABSOLUE
   `q_mesuré + a[:6]·DELTA_MAX` + pince binaire (a[6] > 0 → fermée) ;
 * observation → {"pixels": {front, wrist} 128×128 uint8 HWC, "agent_pos"} ;
-* récompense de l'env interne configurée SPARSE {0.0, 1.0} — cohérente avec le
-  `next.reward` ∈ {0, 1} du dataset démos (le critic mélange 50/50 online et
+* récompense de l'env interne : SPARSE {0.0, 1.0} par défaut — cohérente avec
+  le `next.reward` ∈ {0, 1} du dataset démos (le critic mélange 50/50 online et
   offline, RL_PLAN §1.3/§4 : un −R_TEMPS par pas côté env mais absent des démos
-  biaiserait le mélange) ;
+  biaiserait le mélange) ; commutable en DENSE (cf. VARIABLES D'ENVIRONNEMENT) ;
 * info[IS_INTERVENTION]=False + `get_raw_joint_positions()`, le vernis HIL-SERL.
+
+VARIABLES D'ENVIRONNEMENT (défauts = run sparse n°1, reproductible à l'identique)
+================================================================================
+* IGUS_RL_REWARD_MODE ∈ {"sparse", "dense"} (défaut "sparse" ; vide/blanc =
+  absent, même règle que IGUS_RL_MAX_STEPS).
+  - "sparse" : ConfigRecompense(mode=MODE_SPARSE, r_depose=1.0, r_temps=0.0),
+    récompense ∈ {0.0, 1.0} — l'appariement du dataset démos SPARSE
+    (datasets/lerobot_v2_2_rl_demos).
+  - "dense"  : ConfigRecompense(mode=MODE_DENSE) avec les coefficients PAR
+    DÉFAUT de recompense.py (K_PROGRES, R_SAISIE, R_DEPOSE, R_TEMPS,
+    SEUIL_BRUIT_PROGRES). ⚠ COHÉRENCE CRITIC : à n'utiliser qu'avec un dataset
+    démos rejoué en dense (datasets/lerobot_v2_2_rl_demos_dense), jamais avec
+    le dataset sparse — le mélange 50/50 du critic exige la MÊME fonction de
+    récompense online et offline.
+* IGUS_RL_MAX_STEPS : plafond de pas d'épisode (défaut 300 = 20 s sim à 15 Hz).
+  Entier dans [50, 1500] — toute autre valeur lève ValueError au démarrage
+  (erreur bruyante plutôt qu'un run de nuit silencieusement faux).
+La configuration effective est journalisée (logging.info) à la construction.
+
+RÉCOMPENSE NON BORNÉE EN DENSE — VÉRIFIÉ SANS EFFET DE BORD
+===========================================================
+En dense, r ∈ ℝ (shaping ±K_PROGRES·Δd, bonus 2/10, −R_TEMPS par pas). Prouvé
+dans les sources que RIEN sur le chemin ne suppose r ∈ {0,1} :
+* cette enveloppe : step() transmet `recompense` telle quelle (aucun clip) ;
+* actor.py:317-321/352 : la récompense n'est qu'ACCUMULÉE pour la télémétrie
+  (`sum_reward_episode += float(reward)`), jamais comparée à 1 ;
+* gym_manipulator.py:550 : addition de float(info[SUCCESS]) = 0.0 (clé jamais
+  posée ici, cf. ci-dessous) — additif neutre, pas de clamp ;
+* learner.py:405/463 : batch["reward"] entre BRUT dans les cibles SAC ;
+* la terminaison sur succès passe par info/terminated, jamais par la valeur de
+  la récompense (hil_processor.py:494-496).
+Télémétrie assortie : train_rl_pilote.sh compte les succès par SEUIL numérique
+sur la valeur d'« Episode reward » (≥ 0.5 en sparse, ≥ 5.0 en dense — le
+shaping seul, ≤ k_progres·0,8 + r_saisie − r_temps·n, ne peut pas l'atteindre ;
+r_depose=10 si).
 
 CONTRAT PROUVÉ DANS LES SOURCES DU VENV (jamais deviné)
 =======================================================
@@ -67,6 +102,8 @@ l'extrait du source par ast quand ROS n'est pas sourcé.
 """
 from __future__ import annotations
 
+import logging
+import os
 from typing import Any, Dict, Optional, Tuple
 
 import cv2
@@ -80,9 +117,11 @@ from gymnasium import spaces
 from lerobot.teleoperators.utils import TeleopEvents
 
 from igus_vla.rl.gym_igus import GymIgusPickPlace, HorlogeSimFigeeError
-from igus_vla.rl.recompense import MODE_SPARSE, ConfigRecompense
+from igus_vla.rl.recompense import MODE_DENSE, MODE_SPARSE, ConfigRecompense
 
 __all__ = ["DELTA_MAX", "IgusGazeboRLEnv", "HorlogeSimFigeeError"]
+
+_LOGGER = logging.getLogger(__name__)
 
 # ── Constantes de la spec §3.3 ────────────────────────────────────────────────
 # Amplitude max d'UN delta articulaire par pas (rad). LITTÉRAL requis (cf.
@@ -95,13 +134,20 @@ DELTA_MAX = 0.05
 # vivre dans la même distribution visuelle).
 TAILLE_IMAGE_RL = 128
 
-# Plafond de pas d'épisode : reset.control_time_s 20 s × fps 15 (rl_sac.json)
-# = la ligne « fin d'épisode » du tableau §3.3. Implémenté DANS l'env interne
-# (max_steps) car le pipeline gym_hil ne porte pas de TimeLimit (§3.3).
+# Plafond de pas d'épisode PAR DÉFAUT : reset.control_time_s 20 s × fps 15
+# (rl_sac.json) = la ligne « fin d'épisode » du tableau §3.3. Implémenté DANS
+# l'env interne (max_steps) car le pipeline gym_hil ne porte pas de TimeLimit
+# (§3.3). Surchargeable par IGUS_RL_MAX_STEPS (cf. en-tête).
 # ⚠ Couplage MANUEL : control_time_s du JSON est purement informatif ici
-# (aucune étape TimeLimit dans make_igus_processors) — CETTE constante est la
+# (aucune étape TimeLimit dans make_igus_processors) — cette valeur est la
 # troncature réelle ; la resynchroniser à la main si le JSON change.
 _MAX_PAS_EPISODE = 300
+
+# Bornes de validation d'IGUS_RL_MAX_STEPS : < 50 pas (3,3 s sim) ne laisse
+# même pas le temps d'atteindre l'objet ; > 1500 (100 s sim) ferait dériver la
+# distribution des épisodes très loin de celle des démos.
+_MAX_PAS_MIN = 50
+_MAX_PAS_MAX = 1500
 
 # Cadence de contrôle = env.fps de config/rl_sac.json (celle du dataset).
 _CONTROL_HZ = 15.0
@@ -110,6 +156,45 @@ _CONTROL_HZ = 15.0
 # `_JOINT_NAMES`, constante privée là-bas) — uniquement pour le format
 # {"<joint>.pos": float} de get_raw_joint_positions().
 _NOMS_JOINTS = ("joint1", "joint2", "joint3", "joint4", "joint5", "joint6")
+
+
+def _config_recompense_depuis_env() -> ConfigRecompense:
+    """Construit la ConfigRecompense pilotée par IGUS_RL_REWARD_MODE (en-tête).
+
+    Défaut "sparse" = la config EXACTE du run n°1 (r_depose=1.0, r_temps=0.0,
+    récompense ∈ {0.0, 1.0}). "dense" = coefficients par défaut de
+    recompense.py. Chaîne vide/blanche = absente (défaut sparse — même règle
+    que IGUS_RL_MAX_STEPS : `export IGUS_RL_REWARD_MODE=` désactive proprement).
+    Toute autre valeur lève ValueError (erreur bruyante).
+    """
+    brut = os.environ.get("IGUS_RL_REWARD_MODE")
+    if brut is None or not brut.strip():
+        return ConfigRecompense(mode=MODE_SPARSE, r_depose=1.0, r_temps=0.0)
+    mode = brut.strip().lower()
+    if mode == MODE_SPARSE:
+        return ConfigRecompense(mode=MODE_SPARSE, r_depose=1.0, r_temps=0.0)
+    if mode == MODE_DENSE:
+        return ConfigRecompense(mode=MODE_DENSE)
+    raise ValueError(
+        f"IGUS_RL_REWARD_MODE={mode!r} invalide "
+        f"(attendu {MODE_SPARSE!r} ou {MODE_DENSE!r})")
+
+
+def _max_pas_depuis_env() -> int:
+    """Plafond de pas d'épisode : IGUS_RL_MAX_STEPS validé, sinon défaut 300."""
+    brut = os.environ.get("IGUS_RL_MAX_STEPS")
+    if brut is None or not brut.strip():
+        return _MAX_PAS_EPISODE
+    try:
+        valeur = int(brut)
+    except ValueError as exc:
+        raise ValueError(
+            f"IGUS_RL_MAX_STEPS={brut!r} : entier attendu") from exc
+    if not _MAX_PAS_MIN <= valeur <= _MAX_PAS_MAX:
+        raise ValueError(
+            f"IGUS_RL_MAX_STEPS={valeur} hors bornes "
+            f"[{_MAX_PAS_MIN}, {_MAX_PAS_MAX}]")
+    return valeur
 
 
 def redimensionner_image(img_hwc_uint8: np.ndarray) -> np.ndarray:
@@ -139,17 +224,30 @@ class IgusGazeboRLEnv(gym.Env):
     def __init__(self, node: Optional[Any] = None, **options_gym_igus: Any) -> None:
         super().__init__()
 
-        # ── Env interne : réglages §3.3 (cadence, plafond, récompense sparse) ─
-        # r_depose=1.0 / r_temps=0.0 : la récompense de l'env doit valoir
-        # EXACTEMENT {0.0, 1.0} comme le next.reward des démos converties
-        # (cf. en-tête — mélange 50/50 du critic, RL_PLAN §1.3/§4).
+        # ── Env interne : réglages §3.3 (cadence, plafond, récompense) ───────
+        # Récompense et plafond pilotés par IGUS_RL_REWARD_MODE /
+        # IGUS_RL_MAX_STEPS (cf. en-tête) — défauts = run sparse n°1 à
+        # l'identique. En sparse, r_depose=1.0 / r_temps=0.0 : la récompense
+        # doit valoir EXACTEMENT {0.0, 1.0} comme le next.reward des démos
+        # converties (mélange 50/50 du critic, RL_PLAN §1.3/§4) ; en dense,
+        # l'appariement se fait avec le dataset démos rejoué en dense.
         reglages: Dict[str, Any] = dict(
             control_hz=_CONTROL_HZ,
-            max_steps=_MAX_PAS_EPISODE,
-            config_recompense=ConfigRecompense(
-                mode=MODE_SPARSE, r_depose=1.0, r_temps=0.0),
+            max_steps=_max_pas_depuis_env(),
+            config_recompense=_config_recompense_depuis_env(),
         )
         reglages.update(options_gym_igus)
+
+        # Journal de la config EFFECTIVE (après surcharge éventuelle des kwargs
+        # d'essai) : sans cette ligne, impossible de savoir au matin quel mode
+        # un run de nuit a réellement utilisé.
+        _LOGGER.info(
+            "IgusGazeboRLEnv : recompense=%s, max_steps=%s "
+            "(IGUS_RL_REWARD_MODE=%r, IGUS_RL_MAX_STEPS=%r)",
+            reglages["config_recompense"], reglages["max_steps"],
+            os.environ.get("IGUS_RL_REWARD_MODE"),
+            os.environ.get("IGUS_RL_MAX_STEPS"))
+
         self._env = GymIgusPickPlace(node, **reglages)
 
         # Limites articulaires URDF : reprises de l'env interne (source unique),
