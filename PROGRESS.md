@@ -16,8 +16,12 @@ jour** ; apparié : 12 gains / 5 pertes (binomial unilatéral p = 0,072) — pro
 - **Gain en périphérie r ≥ 0,45 : 10/20 → 14/20** (la tranche des échecs systématiques) ;
   **rattrapages 1 → 8** (le retry démontré transfère) ; séjour <10 cm +3,7 pts (p=0,008) ;
   fermeture en anticipation (p<0,001). **Visée fine inchangée** (dxy min 0,90 cm, sous DMD).
-- **12/12 échecs v2.4 = timeout 45 s en plein rattrapage** (≥2 fermetures) → l'éval
-  complémentaire à 60-70 s devient LA mesure prioritaire (points gratuits probables).
+- **Hypothèse timeout testée et RÉFUTÉE dans la foulée** (éval t65, mêmes 50 pos. :
+  34/50) : AUCUN succès > 45 s (méd 14,6 s, max 43,1 s) ; les « coupés en plein
+  rattrapage » tâtonnent en réalité sans fin (8-15 fermetures stériles sur 65 s).
+  Échecs = états ABSORBANTS → levier = précision d'ancrage (RL/DAgger), pas le chrono ;
+  **timeout d'éval maintenu à 45 s**. Bonus : bruit de re-run quantifié = 10 bascules/50
+  (20 %, cohérent seedB) → un score isolé vaut ±4-5 ép., seul l'apparié fait foi.
 - **Piège découvert** : le tirage seed 42 n = 50 ne reproduit PAS les 20 premiers du
   tirage n = 20 (aucune position historique dans les 50, plus proche à 1,4 cm).
   Comparaison 50↔50 valide ; grille seedB par idx non transposable ; inclure le fichier
